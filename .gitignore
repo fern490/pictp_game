@@ -48,3 +48,4 @@ bun.lockb
 
 # TypeScript
 *.tsbuildinfo
+node_modules

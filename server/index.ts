@@ -14,14 +14,7 @@ type Player = {
 const clients = new Set<any>();
 const players = new Map<string, Player>();
 
-function updateGame() {
-  for (const player of players.values()) {
-    if (player.input.left) player.x -= 3;
-    if (player.input.right) player.x += 3;
-    if (player.input.up) player.y -= 3;
-    if (player.input.down) player.y += 3;
-  }
-}
+function updateGame() {}
 
 function broadcast() {
   const state = JSON.stringify({
@@ -67,21 +60,29 @@ Bun.serve({
     },
 
     message(ws, message) {
-      const data = JSON.parse(message.toString());
+      try {
+        const data = JSON.parse(message.toString());
+        const id = (ws as any).id;
+        const player = players.get(id);
 
-      const id = (ws as any).id;
-      const player = players.get(id);
+        if (!player) return;
 
-      if (!player) return;
-
-      player.input = data.input;
+        player.input = {
+          ...player.input,
+          ...data.input,
+        };
+      } catch (e) {
+        console.error("Error procesando mensaje:", e);
+      }
     },
-
     close(ws) {
       clients.delete(ws);
-
       const id = (ws as any).id;
-      if (id) players.delete(id);
+
+      if (id) {
+        players.delete(id);
+        console.log(`Jugador desconectado: ${id}`);
+      }
     },
   },
 });

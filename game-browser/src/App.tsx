@@ -21,6 +21,7 @@ type GameState = {
   keyY: number;
   doorX: number;
   doorY: number;
+  keyCarrierId: string | null; // Guardamos quién lleva la llave
 };
 
 type Platform = {
@@ -56,6 +57,7 @@ export default function App() {
     keyY: 200,
     doorX: 900,
     doorY: 240,
+    keyCarrierId: null
   });
 
   const playersRef = useRef<Player[]>([]);
@@ -63,7 +65,8 @@ export default function App() {
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const ws = new WebSocket("ws://10.56.2.50:3000");
+    //  SOLUCIÓN 1: Conexión local al servidor en la misma PC
+    const ws = new WebSocket("ws://localhost:3000");
     wsRef.current = ws;
 
     ws.onopen = () => console.log("Conectado al host");
@@ -72,11 +75,18 @@ export default function App() {
       const data = JSON.parse(msg.data);
 
       if (data.type === "state") {
-        const updatedPlayers = data.players.slice(0, 4).map((p: any, index: number) => ({
-          ...p,
-          color: COLORS[index],
-          input: p.input || { left: false, right: false, up: false, down: false, jump: false }
-        }));
+        // Combinamos las posiciones y los inputs que manda el servidor
+        const updatedPlayers = data.players.slice(0, 4).map((p: any, index: number) => {
+          // Buscamos si ya teníamos guardado a este jugador para conservar su posición calculada en la web
+          const existingPlayer = playersRef.current.find((ex) => ex.id === p.id);
+          return {
+            id: p.id,
+            x: existingPlayer ? existingPlayer.x : p.x, // Si ya existía, usamos su X actual
+            y: existingPlayer ? existingPlayer.y : p.y, // Si ya existía, usamos su Y actual
+            color: COLORS[index],
+            input: p.input || { left: false, right: false, up: false, down: false, jump: false }
+          };
+        });
         playersRef.current = updatedPlayers;
       }
     };
@@ -97,14 +107,15 @@ export default function App() {
 
     if (currentPlayers.length === 0) return;
 
+    // SOLUCIÓN 2: Procesamos el movimiento aquí usando la velocidad de la web
     currentPlayers = currentPlayers.map((player) => {
       let nextX = player.x;
       let nextY = player.y;
 
-      if (player.input.left) nextX -= 5;
-      if (player.input.right) nextX += 5;
-      if (player.input.up) nextY -= 5;
-      if (player.input.down) nextY += 5;
+      if (player.input.left) nextX -= 6;
+      if (player.input.right) nextX += 6;
+      if (player.input.up) nextY -= 6;
+      if (player.input.down) nextY += 6;
 
       nextX = Math.max(0, Math.min(window.innerWidth - 30, nextX));
       nextY = Math.max(0, Math.min(window.innerHeight - 30, nextY));
@@ -112,6 +123,7 @@ export default function App() {
       return { ...player, x: nextX, y: nextY };
     });
 
+    // Físicas de Torres Humana estilo Pico Park
     for (let i = 0; i < currentPlayers.length; i++) {
       for (let j = 0; j < currentPlayers.length; j++) {
         if (i === j) continue;
@@ -129,18 +141,29 @@ export default function App() {
       }
     }
 
+    // Lógica Cooperativa de la Llave perfeccionada
     if (!currentGeo.keyCollected) {
       const luckyPlayer = currentPlayers.find(
         (p) => Math.abs(p.x - currentGeo.keyX) < 30 && Math.abs(p.y - currentGeo.keyY) < 30
       );
       if (luckyPlayer) {
         currentGeo.keyCollected = true;
+        currentGeo.keyCarrierId = luckyPlayer.id; // Guardamos quién la lleva
       }
     } else {
-      currentGeo.keyX = currentPlayers[0].x + 5;
-      currentGeo.keyY = currentPlayers[0].y - 20;
+      // La llave sigue específicamente al jugador que la agarró
+      const carrier = currentPlayers.find((p) => p.id === currentGeo.keyCarrierId);
+      if (carrier) {
+        currentGeo.keyX = carrier.x + 5;
+        currentGeo.keyY = carrier.y - 20;
+      } else {
+        // Si el portador se desconecta, soltar llave
+        currentGeo.keyCollected = false;
+        currentGeo.keyCarrierId = null;
+      }
     }
 
+    // Condición de Victoria para cambiar de nivel
     if (currentGeo.keyCollected) {
       const allAtDoor = currentPlayers.every(
         (p) => Math.abs(p.x - currentGeo.doorX) < 40 && Math.abs(p.y - currentGeo.doorY) < 40
@@ -150,6 +173,7 @@ export default function App() {
         if (currentGeo.level === 1) {
           currentGeo.level = 2;
           currentGeo.keyCollected = false;
+          currentGeo.keyCarrierId = null;
           currentGeo.keyX = 540;
           currentGeo.keyY = 130;
           currentGeo.doorX = 120;
@@ -158,6 +182,7 @@ export default function App() {
           alert("¡Ganaron el juego completo!");
           currentGeo.level = 1;
           currentGeo.keyCollected = false;
+          currentGeo.keyCarrierId = null;
           currentGeo.keyX = 320;
           currentGeo.keyY = 200;
           currentGeo.doorX = 900;
@@ -175,14 +200,8 @@ export default function App() {
   return (
     <div 
       style={{ 
-        position: "fixed", 
-        top: 0, 
-        left: 0, 
-        width: "100vw", 
-        height: "100vh", 
-        background: "linear-gradient(to bottom, #7ac1eb, #bfe3f7)", 
-        overflow: "hidden",
-        fontFamily: "sans-serif"
+        position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", 
+        background: "linear-gradient(to bottom, #7ac1eb, #bfe3f7)", overflow: "hidden", fontFamily: "sans-serif"
       }}
     >
       <div style={{ position: "absolute", top: 20, left: 20, color: "#1e3d59", zIndex: 10 }}>
@@ -197,14 +216,9 @@ export default function App() {
         <div
           key={index}
           style={{
-            position: "absolute",
-            left: plat.x,
-            top: plat.y,
-            width: plat.width,
-            height: plat.height,
+            position: "absolute", left: plat.x, top: plat.y, width: plat.width, height: plat.height,
             background: "linear-gradient(to bottom, #a1d974 0%, #7cb64b 25%, #634631 30%, #4a3222 100%)",
-            borderRadius: "12px",
-            boxShadow: "0 12px 0px rgba(0,0,0,0.15), inset 0 4px 0 rgba(255,255,255,0.3)",
+            borderRadius: "12px", boxShadow: "0 12px 0px rgba(0,0,0,0.15), inset 0 4px 0 rgba(255,255,255,0.3)",
             borderBottom: "6px solid #362216"
           }}
         />
@@ -212,16 +226,9 @@ export default function App() {
 
       <div
         style={{
-          position: "absolute",
-          left: gameState.doorX,
-          top: gameState.doorY,
-          width: 50,
-          height: 60,
-          backgroundColor: "#a05a2c",
-          border: "3px solid #fff",
-          borderRadius: "8px 8px 0 0",
-          boxShadow: "0 8px 16px rgba(0,0,0,0.2)",
-          zIndex: 2
+          position: "absolute", left: gameState.doorX, top: gameState.doorY, width: 50, height: 60,
+          backgroundColor: "#a05a2c", border: "3px solid #fff", borderRadius: "8px 8px 0 0",
+          boxShadow: "0 8px 16px rgba(0,0,0,0.2)", zIndex: 2
         }}
       >
         <div style={{ color: "white", fontSize: 10, textAlign: "center", marginTop: 20, fontWeight: "bold" }}>SALIDA</div>
@@ -229,13 +236,8 @@ export default function App() {
 
       <div
         style={{
-          position: "absolute",
-          left: gameState.keyX,
-          top: gameState.keyY,
-          fontSize: 28,
-          zIndex: 3,
-          filter: "drop-shadow(0px 4px 6px rgba(0,0,0,0.2))",
-          transition: gameState.keyCollected ? "none" : "all 0.1s linear"
+          position: "absolute", left: gameState.keyX, top: gameState.keyY, fontSize: 28, zIndex: 3,
+          filter: "drop-shadow(0px 4px 6px rgba(0,0,0,0.2))", transition: gameState.keyCollected ? "none" : "all 0.1s linear"
         }}
       >
         🔑
@@ -245,17 +247,9 @@ export default function App() {
         <div
           key={p.id}
           style={{
-            position: "absolute",
-            left: p.x,
-            top: p.y,
-            width: 30,
-            height: 30,
-            backgroundColor: p.color,
-            borderRadius: "6px",
-            boxShadow: "0 6px 12px rgba(0,0,0,0.25)",
-            border: "2px solid #fff",
-            zIndex: 5,
-            transition: "left 0.05s linear, top 0.05s linear"
+            position: "absolute", left: p.x, top: p.y, width: 30, height: 30,
+            backgroundColor: p.color, borderRadius: "6px", boxShadow: "0 6px 12px rgba(0,0,0,0.25)",
+            border: "2px solid #fff", zIndex: 5, transition: "left 0.05s linear, top 0.05s linear"
           }}
         />
       ))}
