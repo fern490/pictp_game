@@ -43,10 +43,20 @@ Bun.serve({
       const id = crypto.randomUUID();
       (ws as any).id = id;
 
+      const spawns = [
+        { x: 100, y: 10 },
+        { x: 200, y: 10 },
+        { x: 300, y: 100 },
+        { x: 400, y: 100 },
+      ];
+
+      const spawnIndex = clients.size - 1;
+      const spawn = spawns[spawnIndex % spawns.length];
+
       players.set(id, {
         id,
-        x: 100,
-        y: 100,
+        x: spawn.x,
+        y: spawn.y,
         input: {
           left: false,
           right: false,

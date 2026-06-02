@@ -7,10 +7,9 @@ export default function App() {
   const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    // 🔥 Forzar modo horizontal (landscape)
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
 
-    ws.current = new WebSocket("ws://10.56.2.64:3000");
+    ws.current = new WebSocket("ws://10.56.2.65:3000");
 
     ws.current.onopen = () => {
       console.log("conectado al host");
@@ -39,41 +38,62 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Pico Park Controller</Text>
+      <Text style={styles.title}>Controller</Text>
 
       <View style={styles.controls}>
+
         {/* IZQUIERDA */}
         <View style={styles.left}>
-          <Pressable
-            onPressIn={() => sendInput("left", true)}
-            onPressOut={() => sendInput("left", false)}
-            style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
-          >
-            <Text style={styles.btnText}>◀</Text>
-          </Pressable>
 
-          <Pressable
-            onPressIn={() => sendInput("right", true)}
-            onPressOut={() => sendInput("right", false)}
-            style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
-          >
-            <Text style={styles.btnText}>▶</Text>
-          </Pressable>
+          {}
+          <View style={styles.glowWrapBlue}>
+            <View style={styles.glowLayerBlue} />
+            <Pressable
+              onPressIn={() => sendInput("left", true)}
+              onPressOut={() => sendInput("left", false)}
+              style={({ pressed }) => [
+                styles.btn,
+                pressed && styles.btnPressed,
+              ]}
+            >
+              <Text style={styles.btnText}>◀</Text>
+            </Pressable>
+          </View>
+
+          {/* DERECHA */}
+          <View style={styles.glowWrapBlue}>
+            <View style={styles.glowLayerBlue} />
+            <Pressable
+              onPressIn={() => sendInput("right", true)}
+              onPressOut={() => sendInput("right", false)}
+              style={({ pressed }) => [
+                styles.btn,
+                pressed && styles.btnPressed,
+              ]}
+            >
+              <Text style={styles.btnText}>▶</Text>
+            </Pressable>
+          </View>
+
         </View>
 
-        {/* SALTO (derecha estilo clásico) */}
+        {/* SALTO */}
         <View style={styles.right}>
-          <Pressable
-            onPressIn={() => sendInput("jump", true)}
-            onPressOut={() => sendInput("jump", false)}
-            style={({ pressed }) => [
-              styles.jumpBtn,
-              pressed && styles.btnPressed,
-            ]}
-          >
-            <Text style={styles.btnText}>JUMP</Text>
-          </Pressable>
+          <View style={styles.glowWrapRed}>
+            <View style={styles.glowLayerRed} />
+            <Pressable
+              onPressIn={() => sendInput("jump", true)}
+              onPressOut={() => sendInput("jump", false)}
+              style={({ pressed }) => [
+                styles.jumpBtn,
+                pressed && styles.btnPressed,
+              ]}
+            >
+              <Text style={styles.jumpText}>▲</Text>
+            </Pressable>
+          </View>
         </View>
+
       </View>
 
       <StatusBar style="auto" />
@@ -84,7 +104,7 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#111",
+    backgroundColor: "#676060",
     justifyContent: "space-between",
     padding: 20,
   },
@@ -105,14 +125,16 @@ const styles = StyleSheet.create({
 
   left: {
     flexDirection: "row",
-    gap: 20,
-    marginLeft: 30,
-    marginTop: 10
+    gap: 30,
+    marginLeft: 90,
+    marginTop: 130,
   },
 
   right: {
     justifyContent: "center",
     alignItems: "center",
+    marginRight: 120,
+    marginTop: 50,
   },
 
   btn: {
@@ -120,6 +142,8 @@ const styles = StyleSheet.create({
     paddingVertical: 25,
     paddingHorizontal: 30,
     borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   jumpBtn: {
@@ -127,6 +151,50 @@ const styles = StyleSheet.create({
     paddingVertical: 55,
     paddingHorizontal: 45,
     borderRadius: 60,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  glowWrapBlue: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  glowWrapRed: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  glowLayerBlue: {
+    position: "absolute",
+    width: 100,
+    height: 100,
+    borderRadius: 20,
+    backgroundColor: "#1e90ff",
+
+    opacity: 0.4,
+
+    shadowColor: "#1e90ff",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 35,
+    elevation: 30,
+  },
+
+  glowLayerRed: {
+    position: "absolute",
+    width: 140,
+    height: 165,
+    borderRadius: 60,
+    backgroundColor: "#ff3b30",
+
+    opacity: 0.35,
+
+    shadowColor: "#ff3b30",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 45,
+    elevation: 35,
   },
 
   btnPressed: {
@@ -138,5 +206,12 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 28,
     fontWeight: "bold",
+  },
+
+  jumpText: {
+    color: "#fff",
+    fontSize: 35,
+    fontWeight: "bold",
+    transform: [{ scale: 1.7 }],
   },
 });

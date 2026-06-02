@@ -77,13 +77,10 @@ export default function App() {
         const updatedPlayers = data.players
           .slice(0, 4)
           .map((p: any, index: number) => {
-            const existingPlayer = playersRef.current.find(
-              (ex) => ex.id === p.id,
-            );
             return {
               id: p.id,
-              x: existingPlayer ? existingPlayer.x : p.x,
-              y: existingPlayer ? existingPlayer.y : p.y,
+              x: p.x,
+              y: p.y,
               color: COLORS[index],
               input: p.input || {
                 left: false,
@@ -230,7 +227,7 @@ export default function App() {
         <p style={{ margin: "5px 0 0 0", fontWeight: "bold" }}>
           {gameState.keyCollected
             ? "🔑 ¡Llave obtenida! Vayan a la puerta"
-            : "⚠️ Busquen la llave cooperando"}
+            : "⚠️ Busquen la llave"}
         </p>
         <p style={{ margin: "5px 0 0 0", fontSize: 14 }}>
           Jugadores: {players.length} / 4
