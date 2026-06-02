@@ -21,7 +21,7 @@ type GameState = {
   keyY: number;
   doorX: number;
   doorY: number;
-  keyCarrierId: string | null; // Guardamos quién lleva la llave
+  keyCarrierId: string | null;
 };
 
 type Platform = {
@@ -38,14 +38,14 @@ const LEVEL_PLATFORMS: Record<number, Platform[]> = {
     { x: 100, y: 500, width: 250, height: 40 },
     { x: 450, y: 400, width: 300, height: 40 },
     { x: 250, y: 250, width: 200, height: 40 },
-    { x: 800, y: 300, width: 220, height: 40 }
+    { x: 800, y: 300, width: 220, height: 40 },
   ],
   2: [
     { x: 50, y: 550, width: 200, height: 40 },
     { x: 350, y: 450, width: 180, height: 40 },
     { x: 650, y: 350, width: 180, height: 40 },
-    { x: 450, y: 180, width: 200, height: 40 }
-  ]
+    { x: 450, y: 180, width: 200, height: 40 },
+  ],
 };
 
 export default function App() {
@@ -57,7 +57,7 @@ export default function App() {
     keyY: 200,
     doorX: 900,
     doorY: 240,
-    keyCarrierId: null
+    keyCarrierId: null,
   });
 
   const playersRef = useRef<Player[]>([]);
@@ -65,7 +65,6 @@ export default function App() {
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    //  SOLUCIÓN 1: Conexión local al servidor en la misma PC
     const ws = new WebSocket("ws://localhost:3000");
     wsRef.current = ws;
 
@@ -75,18 +74,26 @@ export default function App() {
       const data = JSON.parse(msg.data);
 
       if (data.type === "state") {
-        // Combinamos las posiciones y los inputs que manda el servidor
-        const updatedPlayers = data.players.slice(0, 4).map((p: any, index: number) => {
-          // Buscamos si ya teníamos guardado a este jugador para conservar su posición calculada en la web
-          const existingPlayer = playersRef.current.find((ex) => ex.id === p.id);
-          return {
-            id: p.id,
-            x: existingPlayer ? existingPlayer.x : p.x, // Si ya existía, usamos su X actual
-            y: existingPlayer ? existingPlayer.y : p.y, // Si ya existía, usamos su Y actual
-            color: COLORS[index],
-            input: p.input || { left: false, right: false, up: false, down: false, jump: false }
-          };
-        });
+        const updatedPlayers = data.players
+          .slice(0, 4)
+          .map((p: any, index: number) => {
+            const existingPlayer = playersRef.current.find(
+              (ex) => ex.id === p.id,
+            );
+            return {
+              id: p.id,
+              x: existingPlayer ? existingPlayer.x : p.x,
+              y: existingPlayer ? existingPlayer.y : p.y,
+              color: COLORS[index],
+              input: p.input || {
+                left: false,
+                right: false,
+                up: false,
+                down: false,
+                jump: false,
+              },
+            };
+          });
         playersRef.current = updatedPlayers;
       }
     };
@@ -107,7 +114,6 @@ export default function App() {
 
     if (currentPlayers.length === 0) return;
 
-    // SOLUCIÓN 2: Procesamos el movimiento aquí usando la velocidad de la web
     currentPlayers = currentPlayers.map((player) => {
       let nextX = player.x;
       let nextY = player.y;
@@ -123,7 +129,6 @@ export default function App() {
       return { ...player, x: nextX, y: nextY };
     });
 
-    // Físicas de Torres Humana estilo Pico Park
     for (let i = 0; i < currentPlayers.length; i++) {
       for (let j = 0; j < currentPlayers.length; j++) {
         if (i === j) continue;
@@ -141,32 +146,34 @@ export default function App() {
       }
     }
 
-    // Lógica Cooperativa de la Llave perfeccionada
     if (!currentGeo.keyCollected) {
       const luckyPlayer = currentPlayers.find(
-        (p) => Math.abs(p.x - currentGeo.keyX) < 30 && Math.abs(p.y - currentGeo.keyY) < 30
+        (p) =>
+          Math.abs(p.x - currentGeo.keyX) < 30 &&
+          Math.abs(p.y - currentGeo.keyY) < 30,
       );
       if (luckyPlayer) {
         currentGeo.keyCollected = true;
-        currentGeo.keyCarrierId = luckyPlayer.id; // Guardamos quién la lleva
+        currentGeo.keyCarrierId = luckyPlayer.id;
       }
     } else {
-      // La llave sigue específicamente al jugador que la agarró
-      const carrier = currentPlayers.find((p) => p.id === currentGeo.keyCarrierId);
+      const carrier = currentPlayers.find(
+        (p) => p.id === currentGeo.keyCarrierId,
+      );
       if (carrier) {
         currentGeo.keyX = carrier.x + 5;
         currentGeo.keyY = carrier.y - 20;
       } else {
-        // Si el portador se desconecta, soltar llave
         currentGeo.keyCollected = false;
         currentGeo.keyCarrierId = null;
       }
     }
 
-    // Condición de Victoria para cambiar de nivel
     if (currentGeo.keyCollected) {
       const allAtDoor = currentPlayers.every(
-        (p) => Math.abs(p.x - currentGeo.doorX) < 40 && Math.abs(p.y - currentGeo.doorY) < 40
+        (p) =>
+          Math.abs(p.x - currentGeo.doorX) < 40 &&
+          Math.abs(p.y - currentGeo.doorY) < 40,
       );
 
       if (allAtDoor) {
@@ -198,46 +205,93 @@ export default function App() {
   };
 
   return (
-    <div 
-      style={{ 
-        position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", 
-        background: "linear-gradient(to bottom, #7ac1eb, #bfe3f7)", overflow: "hidden", fontFamily: "sans-serif"
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100vh",
+        background: "linear-gradient(to bottom, #7ac1eb, #bfe3f7)",
+        overflow: "hidden",
+        fontFamily: "sans-serif",
       }}
     >
-      <div style={{ position: "absolute", top: 20, left: 20, color: "#1e3d59", zIndex: 10 }}>
+      <div
+        style={{
+          position: "absolute",
+          top: 20,
+          left: 20,
+          color: "#1e3d59",
+          zIndex: 10,
+        }}
+      >
         <h2 style={{ margin: 0, fontSize: 28 }}>NIVEL: {gameState.level}</h2>
         <p style={{ margin: "5px 0 0 0", fontWeight: "bold" }}>
-          {gameState.keyCollected ? "🔑 ¡Llave obtenida! Vayan a la puerta" : "⚠️ Busquen la llave cooperando"}
+          {gameState.keyCollected
+            ? "🔑 ¡Llave obtenida! Vayan a la puerta"
+            : "⚠️ Busquen la llave cooperando"}
         </p>
-        <p style={{ margin: "5px 0 0 0", fontSize: 14 }}>Jugadores: {players.length} / 4</p>
+        <p style={{ margin: "5px 0 0 0", fontSize: 14 }}>
+          Jugadores: {players.length} / 4
+        </p>
       </div>
 
       {(LEVEL_PLATFORMS[gameState.level] || []).map((plat, index) => (
         <div
           key={index}
           style={{
-            position: "absolute", left: plat.x, top: plat.y, width: plat.width, height: plat.height,
-            background: "linear-gradient(to bottom, #a1d974 0%, #7cb64b 25%, #634631 30%, #4a3222 100%)",
-            borderRadius: "12px", boxShadow: "0 12px 0px rgba(0,0,0,0.15), inset 0 4px 0 rgba(255,255,255,0.3)",
-            borderBottom: "6px solid #362216"
+            position: "absolute",
+            left: plat.x,
+            top: plat.y,
+            width: plat.width,
+            height: plat.height,
+            background:
+              "linear-gradient(to bottom, #a1d974 0%, #7cb64b 25%, #634631 30%, #4a3222 100%)",
+            borderRadius: "12px",
+            boxShadow:
+              "0 12px 0px rgba(0,0,0,0.15), inset 0 4px 0 rgba(255,255,255,0.3)",
+            borderBottom: "6px solid #362216",
           }}
         />
       ))}
 
       <div
         style={{
-          position: "absolute", left: gameState.doorX, top: gameState.doorY, width: 50, height: 60,
-          backgroundColor: "#a05a2c", border: "3px solid #fff", borderRadius: "8px 8px 0 0",
-          boxShadow: "0 8px 16px rgba(0,0,0,0.2)", zIndex: 2
+          position: "absolute",
+          left: gameState.doorX,
+          top: gameState.doorY,
+          width: 50,
+          height: 60,
+          backgroundColor: "#a05a2c",
+          border: "3px solid #fff",
+          borderRadius: "8px 8px 0 0",
+          boxShadow: "0 8px 16px rgba(0,0,0,0.2)",
+          zIndex: 2,
         }}
       >
-        <div style={{ color: "white", fontSize: 10, textAlign: "center", marginTop: 20, fontWeight: "bold" }}>SALIDA</div>
+        <div
+          style={{
+            color: "white",
+            fontSize: 10,
+            textAlign: "center",
+            marginTop: 20,
+            fontWeight: "bold",
+          }}
+        >
+          SALIDA
+        </div>
       </div>
 
       <div
         style={{
-          position: "absolute", left: gameState.keyX, top: gameState.keyY, fontSize: 28, zIndex: 3,
-          filter: "drop-shadow(0px 4px 6px rgba(0,0,0,0.2))", transition: gameState.keyCollected ? "none" : "all 0.1s linear"
+          position: "absolute",
+          left: gameState.keyX,
+          top: gameState.keyY,
+          fontSize: 28,
+          zIndex: 3,
+          filter: "drop-shadow(0px 4px 6px rgba(0,0,0,0.2))",
+          transition: gameState.keyCollected ? "none" : "all 0.1s linear",
         }}
       >
         🔑
@@ -247,9 +301,17 @@ export default function App() {
         <div
           key={p.id}
           style={{
-            position: "absolute", left: p.x, top: p.y, width: 30, height: 30,
-            backgroundColor: p.color, borderRadius: "6px", boxShadow: "0 6px 12px rgba(0,0,0,0.25)",
-            border: "2px solid #fff", zIndex: 5, transition: "left 0.05s linear, top 0.05s linear"
+            position: "absolute",
+            left: p.x,
+            top: p.y,
+            width: 30,
+            height: 30,
+            backgroundColor: p.color,
+            borderRadius: "6px",
+            boxShadow: "0 6px 12px rgba(0,0,0,0.25)",
+            border: "2px solid #fff",
+            zIndex: 5,
+            transition: "left 0.05s linear, top 0.05s linear",
           }}
         />
       ))}
