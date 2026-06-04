@@ -6,34 +6,73 @@ import * as ScreenOrientation from "expo-screen-orientation";
 export default function App() {
   const ws = useRef<WebSocket | null>(null);
 
+  const inputRef = useRef({
+    left: false,
+    right: false,
+    jump: false,
+  });
+
+  const lastSentRef = useRef("___"); // para evitar spam
+
   useEffect(() => {
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+    ScreenOrientation.lockAsync(
+      ScreenOrientation.OrientationLock.LANDSCAPE
+    );
 
-    ws.current = new WebSocket("ws://10.56.2.65:3000");
+    const connect = () => {
+      const socket = new WebSocket("ws://10.56.2.34:3000");
 
-    ws.current.onopen = () => {
-      console.log("conectado al host");
+      socket.onopen = () => {
+        console.log("🟢 conectado al host");
+      };
+
+      socket.onclose = () => {
+        console.log("🔴 desconectado, reconectando...");
+        setTimeout(connect, 1000);
+      };
+
+      socket.onerror = () => {
+        socket.close();
+      };
+
+      socket.onmessage = (msg) => {
+        // opcional debug
+        // console.log(msg.data);
+      };
+
+      ws.current = socket;
     };
 
-    ws.current.onmessage = (msg) => {
-      console.log("server:", msg.data);
-    };
+    connect();
 
     return () => {
       ws.current?.close();
     };
   }, []);
 
-  const sendInput = (dir: "left" | "right" | "jump", isPressed: boolean) => {
-    ws.current?.send(
-      JSON.stringify({
-        input: {
-          left: dir === "left" ? isPressed : false,
-          right: dir === "right" ? isPressed : false,
-          jump: dir === "jump" ? isPressed : false,
-        },
-      }),
-    );
+  // 🔥 LOOP OPTIMIZADO (solo manda si cambió algo)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (ws.current?.readyState !== 1) return;
+
+      const payload = JSON.stringify(inputRef.current);
+
+      // 🚀 evita spam inútil
+      if (payload === lastSentRef.current) return;
+
+      lastSentRef.current = payload;
+
+      ws.current.send(payload);
+    }, 16); // 60 FPS input (MUCHO más responsivo)
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const setInput = (
+    key: "left" | "right" | "jump",
+    value: boolean
+  ) => {
+    inputRef.current[key] = value;
   };
 
   return (
@@ -41,16 +80,12 @@ export default function App() {
       <Text style={styles.title}>Controller</Text>
 
       <View style={styles.controls}>
-
-        {/* IZQUIERDA */}
         <View style={styles.left}>
-
-          {}
           <View style={styles.glowWrapBlue}>
             <View style={styles.glowLayerBlue} />
             <Pressable
-              onPressIn={() => sendInput("left", true)}
-              onPressOut={() => sendInput("left", false)}
+              onPressIn={() => setInput("left", true)}
+              onPressOut={() => setInput("left", false)}
               style={({ pressed }) => [
                 styles.btn,
                 pressed && styles.btnPressed,
@@ -60,12 +95,11 @@ export default function App() {
             </Pressable>
           </View>
 
-          {/* DERECHA */}
           <View style={styles.glowWrapBlue}>
             <View style={styles.glowLayerBlue} />
             <Pressable
-              onPressIn={() => sendInput("right", true)}
-              onPressOut={() => sendInput("right", false)}
+              onPressIn={() => setInput("right", true)}
+              onPressOut={() => setInput("right", false)}
               style={({ pressed }) => [
                 styles.btn,
                 pressed && styles.btnPressed,
@@ -74,16 +108,14 @@ export default function App() {
               <Text style={styles.btnText}>▶</Text>
             </Pressable>
           </View>
-
         </View>
 
-        {/* SALTO */}
         <View style={styles.right}>
           <View style={styles.glowWrapRed}>
             <View style={styles.glowLayerRed} />
             <Pressable
-              onPressIn={() => sendInput("jump", true)}
-              onPressOut={() => sendInput("jump", false)}
+              onPressIn={() => setInput("jump", true)}
+              onPressOut={() => setInput("jump", false)}
               style={({ pressed }) => [
                 styles.jumpBtn,
                 pressed && styles.btnPressed,
@@ -93,7 +125,6 @@ export default function App() {
             </Pressable>
           </View>
         </View>
-
       </View>
 
       <StatusBar style="auto" />

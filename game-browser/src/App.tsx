@@ -64,12 +64,24 @@ export default function App() {
   const gameStateRef = useRef<GameState>(gameState);
   const wsRef = useRef<WebSocket | null>(null);
 
+  const velocitiesRef = useRef<
+    Record<string, { vy: number; isGrounded: boolean }>
+  >({});
+
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:3000");
     wsRef.current = ws;
 
-    ws.onopen = () => console.log("Conectado al host");
+    ws.onopen = () => {
+      console.log("Conectado al host");
 
+      ws.send(
+        JSON.stringify({
+          type: "screen",
+        }),
+      );
+    };
+    
     ws.onmessage = (msg) => {
       const data = JSON.parse(msg.data);
 
@@ -77,11 +89,14 @@ export default function App() {
         const updatedPlayers = data.players
           .slice(0, 4)
           .map((p: any, index: number) => {
+            const existingPlayer = playersRef.current.find(
+              (ex) => ex.id === p.id,
+            );
             return {
               id: p.id,
-              x: p.x,
-              y: p.y,
-              color: COLORS[index],
+              x: existingPlayer ? existingPlayer.x : p.x,
+              y: existingPlayer ? existingPlayer.y : p.y,
+              color: COLORS[index % COLORS.length],
               input: p.input || {
                 left: false,
                 right: false,
@@ -111,17 +126,68 @@ export default function App() {
 
     if (currentPlayers.length === 0) return;
 
+    const platforms = LEVEL_PLATFORMS[currentGeo.level] || [];
+    const PLAYER_SIZE = 30;
+
     currentPlayers = currentPlayers.map((player) => {
+      if (!velocitiesRef.current[player.id]) {
+        velocitiesRef.current[player.id] = { vy: 0, isGrounded: false };
+      }
+
+      const physics = velocitiesRef.current[player.id];
       let nextX = player.x;
       let nextY = player.y;
 
-      if (player.input.left) nextX -= 6;
-      if (player.input.right) nextX += 6;
-      if (player.input.up) nextY -= 6;
-      if (player.input.down) nextY += 6;
+      if (player.input.left) nextX -= 5;
+      if (player.input.right) nextX += 5;
 
-      nextX = Math.max(0, Math.min(window.innerWidth - 30, nextX));
-      nextY = Math.max(0, Math.min(window.innerHeight - 30, nextY));
+      const GRAVITY = 0.8;
+      const TERMINAL_VELOCITY = 12;
+      const JUMP_FORCE = -14;
+
+      physics.vy += GRAVITY;
+      if (physics.vy > TERMINAL_VELOCITY) physics.vy = TERMINAL_VELOCITY;
+      nextY += physics.vy;
+
+      if (player.input.jump && physics.isGrounded) {
+        physics.vy = JUMP_FORCE;
+        physics.isGrounded = false;
+      }
+
+      nextX = Math.max(0, Math.min(window.innerWidth - PLAYER_SIZE, nextX));
+
+      let groundedThisFrame = false;
+      const FLOOR_Y = window.innerHeight - 120;
+
+      if (nextY >= FLOOR_Y) {
+        nextY = FLOOR_Y;
+        physics.vy = 0;
+        groundedThisFrame = true;
+      }
+
+      for (const plat of platforms) {
+        const matchX =
+          nextX + PLAYER_SIZE > plat.x && nextX < plat.x + plat.width;
+
+        if (matchX) {
+          if (
+            player.y + PLAYER_SIZE <= plat.y &&
+            nextY + PLAYER_SIZE >= plat.y
+          ) {
+            nextY = plat.y - PLAYER_SIZE;
+            physics.vy = 0;
+            groundedThisFrame = true;
+          } else if (
+            player.y >= plat.y + plat.height &&
+            nextY <= plat.y + plat.height
+          ) {
+            nextY = plat.y + plat.height;
+            physics.vy = 0;
+          }
+        }
+      }
+
+      physics.isGrounded = groundedThisFrame;
 
       return { ...player, x: nextX, y: nextY };
     });
@@ -132,12 +198,17 @@ export default function App() {
         const p1 = currentPlayers[i];
         const p2 = currentPlayers[j];
 
-        const hitX = Math.abs(p1.x - p2.x) < 30;
-        const hitY = Math.abs(p1.y - p2.y) < 30;
+        const physics1 = velocitiesRef.current[p1.id];
 
-        if (hitX && hitY) {
-          if (p1.y < p2.y) {
-            p1.y = p2.y - 30;
+        const hitX = Math.abs(p1.x - p2.x) < PLAYER_SIZE;
+
+        if (hitX) {
+          if (p1.y + PLAYER_SIZE <= p2.y && p1.y + PLAYER_SIZE + 5 >= p2.y) {
+            p1.y = p2.y - PLAYER_SIZE;
+            if (physics1) {
+              physics1.vy = 0;
+              physics1.isGrounded = true;
+            }
           }
         }
       }
@@ -146,8 +217,8 @@ export default function App() {
     if (!currentGeo.keyCollected) {
       const luckyPlayer = currentPlayers.find(
         (p) =>
-          Math.abs(p.x - currentGeo.keyX) < 30 &&
-          Math.abs(p.y - currentGeo.keyY) < 30,
+          Math.abs(p.x - currentGeo.keyX) < PLAYER_SIZE &&
+          Math.abs(p.y - currentGeo.keyY) < PLAYER_SIZE,
       );
       if (luckyPlayer) {
         currentGeo.keyCollected = true;
@@ -159,7 +230,7 @@ export default function App() {
       );
       if (carrier) {
         currentGeo.keyX = carrier.x + 5;
-        currentGeo.keyY = carrier.y - 20;
+        currentGeo.keyY = carrier.y - 25;
       } else {
         currentGeo.keyCollected = false;
         currentGeo.keyCarrierId = null;
