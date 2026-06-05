@@ -37,7 +37,9 @@ function broadcast() {
   });
 
   for (const client of clients) {
-    if (client.readyState === 1) {
+    const clientId = (client as any).id;
+
+    if (screens.has(clientId) && client.readyState === 1) {
       client.send(state);
     }
   }
@@ -56,8 +58,7 @@ Bun.serve({
       clients.add(ws);
       const id = crypto.randomUUID();
       (ws as any).id = id;
-      // No creamos jugador todavía: esperamos el primer mensaje
-      // para saber si es pantalla o gamepad
+
       console.log(`🟢 Conectado: ${id}`);
     },
 
@@ -69,7 +70,7 @@ Bun.serve({
         // ── Identificar pantalla ──────────────────────────────────────────
         if (data.type === "screen") {
           screens.add(id);
-          players.delete(id); // por si acaso se creó antes
+          players.delete(id);
           console.log(`🖥️  Pantalla registrada: ${id}`);
           return;
         }
@@ -94,8 +95,6 @@ Bun.serve({
         const player = players.get(id);
         if (!player) return;
 
-        // FIX CRÍTICO: el gamepad envía { left, right, jump } directamente
-        // como raíz del JSON, no anidado en data.input
         player.input = {
           ...player.input,
           ...data,
@@ -116,7 +115,7 @@ Bun.serve({
         console.log(
           wasPlayer
             ? `🔴 Jugador desconectado: ${id}`
-            : `🖥️  Pantalla desconectada: ${id}`
+            : `🖥️  Pantalla desconectada: ${id}`,
         );
       }
     },

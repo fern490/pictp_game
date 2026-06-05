@@ -12,15 +12,13 @@ export default function App() {
     jump: false,
   });
 
-  const lastSentRef = useRef("___"); // para evitar spam
+  const lastSentRef = useRef("___");
 
   useEffect(() => {
-    ScreenOrientation.lockAsync(
-      ScreenOrientation.OrientationLock.LANDSCAPE
-    );
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
 
     const connect = () => {
-      const socket = new WebSocket("ws://10.56.2.34:3000");
+      const socket = new WebSocket("ws://10.56.2.10:3000");
 
       socket.onopen = () => {
         console.log("🟢 conectado al host");
@@ -36,8 +34,12 @@ export default function App() {
       };
 
       socket.onmessage = (msg) => {
-        // opcional debug
-        // console.log(msg.data);
+        try {
+          const data = JSON.parse(msg.data);
+          if (data.type === "init") {
+            console.log("🎮 ID asignado:", data.id);
+          }
+        } catch {}
       };
 
       ws.current = socket;
@@ -50,28 +52,23 @@ export default function App() {
     };
   }, []);
 
-  // 🔥 LOOP OPTIMIZADO (solo manda si cambió algo)
   useEffect(() => {
     const interval = setInterval(() => {
       if (ws.current?.readyState !== 1) return;
 
       const payload = JSON.stringify(inputRef.current);
 
-      // 🚀 evita spam inútil
       if (payload === lastSentRef.current) return;
 
       lastSentRef.current = payload;
 
       ws.current.send(payload);
-    }, 16); // 60 FPS input (MUCHO más responsivo)
+    }, 16);
 
     return () => clearInterval(interval);
   }, []);
 
-  const setInput = (
-    key: "left" | "right" | "jump",
-    value: boolean
-  ) => {
+  const setInput = (key: "left" | "right" | "jump", value: boolean) => {
     inputRef.current[key] = value;
   };
 
