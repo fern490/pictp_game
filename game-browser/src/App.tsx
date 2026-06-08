@@ -133,36 +133,29 @@ export default function App() {
       let nextX = player.x;
       let nextY = player.y;
 
-      // 🏃‍♂️ Movimiento Horizontal
       if (player.input.left) nextX -= 5;
       if (player.input.right) nextX += 5;
 
-      // 🦘 PUNTO 1 CORREGIDO: El salto se procesa ANTES de mover la posición Y y antes de las colisiones
       const JUMP_FORCE = -14;
       if (player.input.jump && physics.isGrounded) {
         physics.vy = JUMP_FORCE;
-        physics.isGrounded = false; // Deja de estar en el suelo inmediatamente
+        physics.isGrounded = false;
       }
 
-      // 🍎 Aplicar Gravedad a la velocidad
       const GRAVITY = 0.8;
       const TERMINAL_VELOCITY = 12;
       physics.vy += GRAVITY;
       if (physics.vy > TERMINAL_VELOCITY) physics.vy = TERMINAL_VELOCITY;
-      
-      // Aplicar velocidad final a la posición Y
+
       nextY += physics.vy;
 
-      // Límites laterales de la pantalla
       nextX = Math.max(0, Math.min(window.innerWidth - PLAYER_SIZE, nextX));
 
-      // 💀 PUNTO 2 CORREGIDO: Zona de Muerte / Caída al vacío (Reiniciar al inicio)
       const DEATH_ZONE_Y = window.innerHeight - 50;
       if (nextY >= DEATH_ZONE_Y) {
-        // Coordenadas de inicio dependiendo del nivel
         if (currentGeo.level === 1) {
           nextX = 150;
-          nextY = 400; // Aparece arriba de la primera plataforma para caer en ella
+          nextY = 400;
         } else {
           nextX = 100;
           nextY = 450;
@@ -170,7 +163,6 @@ export default function App() {
         physics.vy = 0;
         physics.isGrounded = false;
 
-        // Mecánica extra: Si el que se cayó llevaba la llave, la pierde y reaparece en su lugar original
         if (currentGeo.keyCarrierId === player.id) {
           currentGeo.keyCollected = false;
           currentGeo.keyCarrierId = null;
@@ -186,14 +178,12 @@ export default function App() {
         return { ...player, x: nextX, y: nextY };
       }
 
-      // 🧱 Colisiones con las plataformas del escenario
       let groundedThisFrame = false;
       for (const plat of platforms) {
         const matchX =
           nextX + PLAYER_SIZE > plat.x && nextX < plat.x + plat.width;
 
         if (matchX) {
-          // Aterrizar sobre una plataforma (Viniendo desde arriba)
           if (
             player.y + PLAYER_SIZE <= plat.y &&
             nextY + PLAYER_SIZE >= plat.y
@@ -201,9 +191,7 @@ export default function App() {
             nextY = plat.y - PLAYER_SIZE;
             physics.vy = 0;
             groundedThisFrame = true;
-          } 
-          // Chocar la cabeza (Viniendo desde abajo)
-          else if (
+          } else if (
             player.y >= plat.y + plat.height &&
             nextY <= plat.y + plat.height
           ) {
@@ -218,7 +206,6 @@ export default function App() {
       return { ...player, x: nextX, y: nextY };
     });
 
-    // Colisión cooperativa (Apilamiento de personajes)
     for (let i = 0; i < currentPlayers.length; i++) {
       for (let j = 0; j < currentPlayers.length; j++) {
         if (i === j) continue;
@@ -240,7 +227,6 @@ export default function App() {
       }
     }
 
-    // Lógica de recolección de llave
     if (!currentGeo.keyCollected) {
       const luckyPlayer = currentPlayers.find(
         (p) =>
@@ -264,7 +250,6 @@ export default function App() {
       }
     }
 
-    // Condición de victoria de nivel / juego completo
     if (currentGeo.keyCollected) {
       const allAtDoor = currentPlayers.every(
         (p) =>

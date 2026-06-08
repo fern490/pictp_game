@@ -18,7 +18,7 @@ export default function App() {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
 
     const connect = () => {
-      const socket = new WebSocket("ws://10.56.2.10:3000");
+      const socket = new WebSocket("ws://10.56.2.35:3000");
 
       socket.onopen = () => {
         console.log("🟢 conectado al host");
@@ -63,7 +63,7 @@ export default function App() {
       lastSentRef.current = payload;
 
       ws.current.send(payload);
-    }, 16);
+    }, 29);
 
     return () => clearInterval(interval);
   }, []);
