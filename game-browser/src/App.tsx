@@ -22,6 +22,11 @@ type GameState = {
   doorX: number;
   doorY: number;
   keyCarrierId: string | null;
+  buttonX: number;
+  buttonY: number;
+  buttonPressed: boolean;
+  buttonTimer: number;
+  buttonActive: boolean; 
 };
 
 type Platform = {
@@ -33,36 +38,65 @@ type Platform = {
 
 const COLORS = ["#FF5733", "#33FF57", "#3357FF", "#F3FF33"];
 
+// MAPA COMPACTO: Todo cabe dentro de una pantalla estándar sin scroll horizontal
 const LEVEL_PLATFORMS: Record<number, Platform[]> = {
   1: [
-    { x: 100, y: 500, width: 250, height: 40 },
-    { x: 450, y: 400, width: 300, height: 40 },
-    { x: 250, y: 250, width: 200, height: 40 },
-    { x: 800, y: 300, width: 220, height: 40 },
+    // --- Zona Izquierda de Inicio ---
+    { x: 30, y: 520, width: 180, height: 40 },  // Base de aparición
+    { x: 120, y: 390, width: 140, height: 40 }, // Escalón de subida izquierdo
+    
+    // --- Mecanismo Central (Botón e Impulso) ---
+    { x: 260, y: 290, width: 200, height: 40 }, // Plataforma alta del botón
+    { x: 320, y: 460, width: 160, height: 40 }, // Apoyo bajo el botón
+    
+    // --- Camino Fluyente hacia la Derecha ---
+    { x: 520, y: 410, width: 150, height: 40 }, // Escalón central derecho
+    { x: 780, y: 450, width: 160, height: 40 }, // Escalón previo a la meta
+    { x: 1140, y: 340, width: 180, height: 40 }, // ¡Plataforma final de la puerta!
   ],
   2: [
-    { x: 50, y: 550, width: 200, height: 40 },
-    { x: 350, y: 450, width: 180, height: 40 },
-    { x: 650, y: 350, width: 180, height: 40 },
-    { x: 450, y: 180, width: 200, height: 40 },
+    // --- Nivel 2 Compacto ---
+    { x: 30, y: 540, width: 160, height: 40 },
+    { x: 120, y: 420, width: 140, height: 40 },
+    { x: 280, y: 310, width: 180, height: 40 }, // Botón Nivel 2
+    { x: 480, y: 440, width: 150, height: 40 },
+    { x: 660, y: 350, width: 140, height: 40 },
+    { x: 840, y: 420, width: 180, height: 40 }, // Plataforma final Nivel 2
   ],
 };
+
+const STARS = [
+  { x: "10%", y: "15%", size: 24, opacity: 0.9 },
+  { x: "25%", y: "5%", size: 14, opacity: 0.6 },
+  { x: "42%", y: "20%", size: 18, opacity: 0.8 },
+  { x: "60%", y: "10%", size: 22, opacity: 0.9 },
+  { x: "78%", y: "25%", size: 16, opacity: 0.7 },
+  { x: "92%", y: "8%", size: 20, opacity: 0.8 },
+  { x: "15%", y: "45%", size: 12, opacity: 0.5 },
+  { x: "85%", y: "50%", size: 15, opacity: 0.6 },
+];
 
 export default function App() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [gameState, setGameState] = useState<GameState>({
     level: 1,
     keyCollected: false,
-    keyX: 320,
-    keyY: 200,
-    doorX: 900,
-    doorY: 240,
+    keyX: 350,
+    keyY: 90,     
+    doorX: 1220, 
+    doorY: 280,   
     keyCarrierId: null,
+    buttonX: 340,
+    buttonY: 270, 
+    buttonPressed: false,
+    buttonTimer: 3,
+    buttonActive: false,
   });
 
   const playersRef = useRef<Player[]>([]);
   const gameStateRef = useRef<GameState>(gameState);
   const wsRef = useRef<WebSocket | null>(null);
+  const timerIntervalRef = useRef<any>(null); 
 
   const velocitiesRef = useRef<
     Record<string, { vy: number; isGrounded: boolean }>
@@ -89,8 +123,9 @@ export default function App() {
             );
             return {
               id: p.id,
-              x: existingPlayer ? existingPlayer.x : p.x,
-              y: existingPlayer ? existingPlayer.y : p.y,
+              // Los jugadores aparecen de forma segura en la nueva plataforma izquierda
+              x: existingPlayer ? existingPlayer.x : 60,
+              y: existingPlayer ? existingPlayer.y : 400,
               color: COLORS[index % COLORS.length],
               input: p.input || {
                 left: false,
@@ -112,8 +147,39 @@ export default function App() {
     return () => {
       ws.close();
       clearInterval(gameInterval);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
   }, []);
+
+  const pressButton = () => {
+    if (gameStateRef.current.buttonPressed) return;
+
+    gameStateRef.current.buttonPressed = true;
+    gameStateRef.current.buttonTimer = 3;
+    setGameState({ ...gameStateRef.current });
+
+    timerIntervalRef.current = setInterval(() => {
+      let currentGeo = { ...gameStateRef.current };
+      if (currentGeo.buttonTimer > 0) {
+        currentGeo.buttonTimer -= 1;
+      } else if (currentGeo.buttonTimer === 0 && !currentGeo.buttonActive) {
+        currentGeo.buttonActive = true;
+        
+        setTimeout(() => {
+          let resetGeo = { ...gameStateRef.current };
+          resetGeo.buttonPressed = false;
+          resetGeo.buttonActive = false;
+          resetGeo.buttonTimer = 3;
+          gameStateRef.current = resetGeo;
+          setGameState(resetGeo);
+        }, 1000);
+
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      }
+      gameStateRef.current = currentGeo;
+      setGameState(currentGeo);
+    }, 1000);
+  };
 
   const updatePhysics = () => {
     let currentPlayers = [...playersRef.current];
@@ -123,6 +189,7 @@ export default function App() {
 
     const platforms = LEVEL_PLATFORMS[currentGeo.level] || [];
     const PLAYER_SIZE = 30;
+    const BUTTON_WIDTH = 40;
 
     currentPlayers = currentPlayers.map((player) => {
       if (!velocitiesRef.current[player.id]) {
@@ -136,7 +203,8 @@ export default function App() {
       if (player.input.left) nextX -= 5;
       if (player.input.right) nextX += 5;
 
-      const JUMP_FORCE = -14;
+      const JUMP_FORCE = currentGeo.buttonActive ? -22 : -14;
+      
       if (player.input.jump && physics.isGrounded) {
         physics.vy = JUMP_FORCE;
         physics.isGrounded = false;
@@ -148,53 +216,52 @@ export default function App() {
       if (physics.vy > TERMINAL_VELOCITY) physics.vy = TERMINAL_VELOCITY;
 
       nextY += physics.vy;
-
+      
+      // Bloqueamos los bordes de la pantalla física para que nadie se salga de lo visible
       nextX = Math.max(0, Math.min(window.innerWidth - PLAYER_SIZE, nextX));
 
+      // Caída al vacío: Regresan al inicio (plataforma izquierda)
       const DEATH_ZONE_Y = window.innerHeight - 50;
       if (nextY >= DEATH_ZONE_Y) {
-        if (currentGeo.level === 1) {
-          nextX = 150;
-          nextY = 400;
-        } else {
-          nextX = 100;
-          nextY = 450;
-        }
+        nextX = 60;
+        nextY = 400;
         physics.vy = 0;
         physics.isGrounded = false;
 
         if (currentGeo.keyCarrierId === player.id) {
           currentGeo.keyCollected = false;
           currentGeo.keyCarrierId = null;
-          if (currentGeo.level === 1) {
-            currentGeo.keyX = 320;
-            currentGeo.keyY = 200;
-          } else {
-            currentGeo.keyX = 540;
-            currentGeo.keyY = 130;
-          }
+          currentGeo.keyX = 350;
+          currentGeo.keyY = 90;
         }
 
         return { ...player, x: nextX, y: nextY };
       }
 
       let groundedThisFrame = false;
+
+      const matchButtonX = nextX + PLAYER_SIZE > currentGeo.buttonX && nextX < currentGeo.buttonX + BUTTON_WIDTH;
+      if (matchButtonX) {
+        if (player.y + PLAYER_SIZE <= currentGeo.buttonY && nextY + PLAYER_SIZE >= currentGeo.buttonY) {
+          nextY = currentGeo.buttonY - PLAYER_SIZE;
+          physics.vy = 0;
+          groundedThisFrame = true;
+
+          if (!currentGeo.buttonPressed) {
+            pressButton();
+          }
+        }
+      }
+
       for (const plat of platforms) {
-        const matchX =
-          nextX + PLAYER_SIZE > plat.x && nextX < plat.x + plat.width;
+        const matchX = nextX + PLAYER_SIZE > plat.x && nextX < plat.x + plat.width;
 
         if (matchX) {
-          if (
-            player.y + PLAYER_SIZE <= plat.y &&
-            nextY + PLAYER_SIZE >= plat.y
-          ) {
+          if (player.y + PLAYER_SIZE <= plat.y && nextY + PLAYER_SIZE >= plat.y) {
             nextY = plat.y - PLAYER_SIZE;
             physics.vy = 0;
             groundedThisFrame = true;
-          } else if (
-            player.y >= plat.y + plat.height &&
-            nextY <= plat.y + plat.height
-          ) {
+          } else if (player.y >= plat.y + plat.height && nextY <= plat.y + plat.height) {
             nextY = plat.y + plat.height;
             physics.vy = 0;
           }
@@ -202,7 +269,6 @@ export default function App() {
       }
 
       physics.isGrounded = groundedThisFrame;
-
       return { ...player, x: nextX, y: nextY };
     });
 
@@ -227,6 +293,7 @@ export default function App() {
       }
     }
 
+    // Lógica de recolección de llave
     if (!currentGeo.keyCollected) {
       const luckyPlayer = currentPlayers.find(
         (p) =>
@@ -238,9 +305,7 @@ export default function App() {
         currentGeo.keyCarrierId = luckyPlayer.id;
       }
     } else {
-      const carrier = currentPlayers.find(
-        (p) => p.id === currentGeo.keyCarrierId,
-      );
+      const carrier = currentPlayers.find((p) => p.id === currentGeo.keyCarrierId);
       if (carrier) {
         currentGeo.keyX = carrier.x + 5;
         currentGeo.keyY = carrier.y - 25;
@@ -250,6 +315,7 @@ export default function App() {
       }
     }
 
+    // Puerta de salida
     if (currentGeo.keyCollected) {
       const allAtDoor = currentPlayers.every(
         (p) =>
@@ -262,19 +328,19 @@ export default function App() {
           currentGeo.level = 2;
           currentGeo.keyCollected = false;
           currentGeo.keyCarrierId = null;
-          currentGeo.keyX = 540;
-          currentGeo.keyY = 130;
-          currentGeo.doorX = 120;
-          currentGeo.doorY = 490;
+          currentGeo.keyX = 350; 
+          currentGeo.keyY = 90;
+          currentGeo.doorX = 900; // Puerta nivel 2 compacta también
+          currentGeo.doorY = 360;
         } else {
           alert("¡Ganaron el juego completo!");
           currentGeo.level = 1;
           currentGeo.keyCollected = false;
           currentGeo.keyCarrierId = null;
-          currentGeo.keyX = 320;
-          currentGeo.keyY = 200;
-          currentGeo.doorX = 900;
-          currentGeo.doorY = 240;
+          currentGeo.keyX = 350;
+          currentGeo.keyY = 90;
+          currentGeo.doorX = 940;
+          currentGeo.doorY = 280;
         }
       }
     }
@@ -293,31 +359,53 @@ export default function App() {
         left: 0,
         width: "100vw",
         height: "100vh",
-        background: "linear-gradient(to bottom, #7ac1eb, #bfe3f7)",
-        overflow: "hidden",
+        background: "linear-gradient(to bottom, #0b101e 0%, #1a2540 100%)",
+        overflow: "hidden", // <-- ELIMINADAS LAS BARRAS DE DESPLAZAMIENTO COMPLETAMENTE
         fontFamily: "sans-serif",
       }}
     >
+      {/* Estrellas */}
+      {STARS.map((star, index) => (
+        <div
+          key={index}
+          style={{
+            position: "absolute",
+            left: star.x,
+            top: star.y,
+            fontSize: star.size,
+            color: "#FFF8D6",
+            opacity: star.opacity,
+            textShadow: "0 0 8px rgba(255, 248, 214, 0.8)",
+            zIndex: 1,
+          }}
+        >
+          ★
+        </div>
+      ))}
+
+      {/* Interfaz / HUD */}
       <div
         style={{
           position: "absolute",
           top: 20,
           left: 20,
-          color: "#1e3d59",
+          color: "#e2e8f0",
+          textShadow: "1px 1px 3px rgba(0,0,0,0.8)",
           zIndex: 10,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: 28 }}>NIVEL: {gameState.level}</h2>
-        <p style={{ margin: "5px 0 0 0", fontWeight: "bold" }}>
-          {gameState.keyCollected
-            ? "🔑 ¡Llave obtenida! Vayan a la puerta"
-            : "⚠️ Busquen la llave"}
+        <h2 style={{ margin: 0, fontSize: 26 }}>NIVEL: {gameState.level}</h2>
+        <p style={{ margin: "4px 0 0 0", fontWeight: "bold", fontSize: 13 }}>
+          {gameState.keyCollected ? "🔑 ¡Llave obtenida! Vayan a la puerta de la derecha" : ""}
         </p>
-        <p style={{ margin: "5px 0 0 0", fontSize: 14 }}>
-          Jugadores: {players.length} / 4
-        </p>
+        {gameState.buttonPressed && (
+          <p style={{ margin: "4px 0 0 0", color: gameState.buttonActive ? "#4caf50" : "#ff9800", fontSize: 16, fontWeight: "bold" }}>
+            {gameState.buttonActive ? "🚀 ¡SUPER SALTO LISTO! ¡SALTA!" : `⏱️ IMPULSO EN: ${gameState.buttonTimer}...`}
+          </p>
+        )}
       </div>
 
+      {/* Plataformas */}
       {(LEVEL_PLATFORMS[gameState.level] || []).map((plat, index) => (
         <div
           key={index}
@@ -327,16 +415,39 @@ export default function App() {
             top: plat.y,
             width: plat.width,
             height: plat.height,
-            background:
-              "linear-gradient(to bottom, #a1d974 0%, #7cb64b 25%, #634631 30%, #4a3222 100%)",
+            background: "linear-gradient(to bottom, #a1d974 0%, #7cb64b 25%, #634631 30%, #4a3222 100%)",
             borderRadius: "12px",
-            boxShadow:
-              "0 12px 0px rgba(0,0,0,0.15), inset 0 4px 0 rgba(255,255,255,0.3)",
-            borderBottom: "6px solid #362216",
+            boxShadow: "0 12px 0px rgba(0,0,0,0.3), inset 0 4px 0 rgba(255,255,255,0.1)",
+            borderBottom: "6px solid #23160e",
+            zIndex: 2,
           }}
         />
       ))}
 
+      {/* Botón Físico */}
+      <div
+        style={{
+          position: "absolute",
+          left: gameState.buttonX,
+          top: gameState.buttonY,
+          height: 20,
+          backgroundColor: gameState.buttonActive ? "#4caf50" : (gameState.buttonPressed ? "#ff9800" : "#f44336"),
+          borderRadius: "6px 6px 0 0",
+          border: "2px solid #fff",
+          boxShadow: "0 4px 8px rgba(0,0,0,0.4)",
+          zIndex: 3,
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          color: "white",
+          fontSize: 10,
+          fontWeight: "bold",
+        }}
+      >
+        {gameState.buttonPressed ? gameState.buttonTimer : "PUSH"}
+      </div>
+
+      {/* Puerta a la Derecha Visible */}
       <div
         style={{
           position: "absolute",
@@ -347,37 +458,30 @@ export default function App() {
           backgroundColor: "#a05a2c",
           border: "3px solid #fff",
           borderRadius: "8px 8px 0 0",
-          boxShadow: "0 8px 16px rgba(0,0,0,0.2)",
-          zIndex: 2,
+          boxShadow: "0 8px 16px rgba(0,0,0,0.5)",
+          zIndex: 3,
+          opacity: gameState.keyCollected ? 1 : 0.6
         }}
       >
-        <div
-          style={{
-            color: "white",
-            fontSize: 10,
-            textAlign: "center",
-            marginTop: 20,
-            fontWeight: "bold",
-          }}
-        >
-          ENTRAR
+        <div style={{ color: "white", fontSize: 9, textAlign: "center", marginTop: 20, fontWeight: "bold" }}>
+          {gameState.keyCollected ? "OPEN" : "LOCK"}
         </div>
       </div>
 
+      {/* Llave Alta */}
       <div
         style={{
           position: "absolute",
           left: gameState.keyX,
           top: gameState.keyY,
           fontSize: 28,
-          zIndex: 3,
-          filter: "drop-shadow(0px 4px 6px rgba(0,0,0,0.2))",
-          transition: gameState.keyCollected ? "none" : "all 0.1s linear",
+          zIndex: 4,
         }}
       >
         🔑
       </div>
 
+      {/* Jugadores */}
       {players.map((p) => (
         <div
           key={p.id}
@@ -389,7 +493,7 @@ export default function App() {
             height: 30,
             backgroundColor: p.color,
             borderRadius: "6px",
-            boxShadow: "0 6px 12px rgba(0,0,0,0.25)",
+            boxShadow: "0 6px 12px rgba(0,0,0,0.4)",
             border: "2px solid #fff",
             zIndex: 5,
             transition: "left 0.05s linear, top 0.05s linear",

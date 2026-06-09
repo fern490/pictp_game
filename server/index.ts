@@ -80,7 +80,6 @@ Bun.serve({
         const data = JSON.parse(message.toString());
         const id = (ws as any).id;
 
-        // ── Identificar pantalla ──────────────────────────────────────────
         if (data.type === "screen") {
           screens.add(id);
           players.delete(id);
@@ -88,7 +87,6 @@ Bun.serve({
           return;
         }
 
-        // ── Registrar gamepad la primera vez que manda input ──────────────
         if (!players.has(id) && !screens.has(id)) {
           const spawnIndex = players.size;
           const spawn = SPAWNS[spawnIndex % SPAWNS.length];
@@ -104,7 +102,6 @@ Bun.serve({
           console.log(`🎮 Jugador ${spawnIndex + 1} registrado: ${id}`);
         }
 
-        // ── Actualizar input ──────────────────────────────────────────────
         const player = players.get(id);
         if (!player) return;
 
@@ -113,6 +110,11 @@ Bun.serve({
           ...data,
         };
         broadcastInput(player);
+
+        if (players.size >= 4) {
+          ws.send(JSON.stringify({ type: "full" }));
+          return;
+        }
       } catch (e) {
         console.error("❌ Error procesando mensaje:", e);
       }

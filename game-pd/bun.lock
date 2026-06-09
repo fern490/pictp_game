@@ -6,6 +6,7 @@
       "name": "game-pd",
       "dependencies": {
         "expo": "^56.0.5",
+        "expo-keep-awake": "~56.0.3",
         "expo-screen-orientation": "^56.0.5",
         "expo-status-bar": "^56.0.4",
         "react": "19.2.3",
