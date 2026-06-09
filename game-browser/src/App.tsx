@@ -360,7 +360,7 @@ export default function App() {
             fontWeight: "bold",
           }}
         >
-          SALIDA
+          ENTRAR
         </div>
       </div>
 

@@ -1,7 +1,33 @@
 import { useEffect, useRef } from "react";
-import { StyleSheet, Text, View, Pressable } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import * as ScreenOrientation from "expo-screen-orientation";
+
+function TouchButton({
+  label,
+  onPressIn,
+  onPressOut,
+  style,
+  textStyle,
+}: {
+  label: string;
+  onPressIn: () => void;
+  onPressOut: () => void;
+  style: any;
+  textStyle: any;
+}) {
+  return (
+    <View
+      style={style}
+      onTouchStart={() => onPressIn()}
+      onTouchEnd={() => onPressOut()}
+      onTouchCancel={() => onPressOut()}
+    >
+      <Text style={textStyle}>{label}</Text>
+    </View>
+  );
+}
 
 export default function App() {
   const ws = useRef<WebSocket | null>(null);
@@ -15,10 +41,12 @@ export default function App() {
   const lastSentRef = useRef("___");
 
   useEffect(() => {
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+    ScreenOrientation.lockAsync(
+      ScreenOrientation.OrientationLock.LANDSCAPE
+    );
 
     const connect = () => {
-      const socket = new WebSocket("ws://10.56.2.35:3000");
+      const socket = new WebSocket("ws://10.56.2.34:3000");
 
       socket.onopen = () => {
         console.log("🟢 conectado al host");
@@ -36,6 +64,7 @@ export default function App() {
       socket.onmessage = (msg) => {
         try {
           const data = JSON.parse(msg.data);
+
           if (data.type === "init") {
             console.log("🎮 ID asignado:", data.id);
           }
@@ -68,8 +97,17 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const setInput = (key: "left" | "right" | "jump", value: boolean) => {
+  const setInput = (
+    key: "left" | "right" | "jump",
+    value: boolean
+  ) => {
+    if (inputRef.current[key] === value) return;
+
     inputRef.current[key] = value;
+
+    if (ws.current?.readyState === 1) {
+      ws.current.send(JSON.stringify(inputRef.current));
+    }
   };
 
   return (
@@ -80,46 +118,40 @@ export default function App() {
         <View style={styles.left}>
           <View style={styles.glowWrapBlue}>
             <View style={styles.glowLayerBlue} />
-            <Pressable
+
+            <TouchButton
+              label="◀"
+              style={styles.btn}
+              textStyle={styles.btnText}
               onPressIn={() => setInput("left", true)}
               onPressOut={() => setInput("left", false)}
-              style={({ pressed }) => [
-                styles.btn,
-                pressed && styles.btnPressed,
-              ]}
-            >
-              <Text style={styles.btnText}>◀</Text>
-            </Pressable>
+            />
           </View>
 
           <View style={styles.glowWrapBlue}>
             <View style={styles.glowLayerBlue} />
-            <Pressable
+
+            <TouchButton
+              label="▶"
+              style={styles.btn}
+              textStyle={styles.btnText}
               onPressIn={() => setInput("right", true)}
               onPressOut={() => setInput("right", false)}
-              style={({ pressed }) => [
-                styles.btn,
-                pressed && styles.btnPressed,
-              ]}
-            >
-              <Text style={styles.btnText}>▶</Text>
-            </Pressable>
+            />
           </View>
         </View>
 
         <View style={styles.right}>
           <View style={styles.glowWrapRed}>
             <View style={styles.glowLayerRed} />
-            <Pressable
+
+            <TouchButton
+              label="▲"
+              style={styles.jumpBtn}
+              textStyle={styles.jumpText}
               onPressIn={() => setInput("jump", true)}
               onPressOut={() => setInput("jump", false)}
-              style={({ pressed }) => [
-                styles.jumpBtn,
-                pressed && styles.btnPressed,
-              ]}
-            >
-              <Text style={styles.jumpText}>▲</Text>
-            </Pressable>
+            />
           </View>
         </View>
       </View>

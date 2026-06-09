@@ -45,6 +45,19 @@ function broadcast() {
   }
 }
 
+function broadcastInput(player: Player) {
+  const msg = JSON.stringify({
+    type: "input",
+    id: player.id,
+    input: player.input,
+  });
+  for (const client of clients) {
+    if (screens.has((client as any).id) && client.readyState === 1) {
+      client.send(msg);
+    }
+  }
+}
+
 Bun.serve({
   port: 3000,
 
@@ -99,6 +112,7 @@ Bun.serve({
           ...player.input,
           ...data,
         };
+        broadcastInput(player);
       } catch (e) {
         console.error("❌ Error procesando mensaje:", e);
       }
