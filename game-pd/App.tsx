@@ -1,9 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View, Pressable, TextInput, KeyboardAvoidingView, Platform } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  Pressable,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
-import { GestureHandlerRootView, PanGestureHandler, State } from "react-native-gesture-handler";
+import {
+  GestureHandlerRootView,
+  PanGestureHandler,
+  State,
+} from "react-native-gesture-handler";
 
 function TouchButton({
   label,
@@ -22,11 +34,10 @@ function TouchButton({
     <PanGestureHandler
       onHandlerStateChange={(event) => {
         const { state } = event.nativeEvent;
-        
+
         if (state === State.BEGAN) {
           onPressIn();
-        } 
-        else if (
+        } else if (
           state === State.END ||
           state === State.CANCELLED ||
           state === State.FAILED
@@ -43,9 +54,11 @@ function TouchButton({
 }
 
 export default function App() {
-  const [ip, setIp] = useState("10.56.2.65");
+  const [ip, setIp] = useState("10.56.2.38");
   const [currentView, setCurrentView] = useState<"setup" | "gamepad">("setup");
-  const [status, setStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
+  const [status, setStatus] = useState<
+    "disconnected" | "connecting" | "connected"
+  >("disconnected");
 
   const ws = useRef<WebSocket | null>(null);
   const inputRef = useRef({
@@ -58,7 +71,7 @@ export default function App() {
 
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-    
+
     return () => {
       ws.current?.close();
       deactivateKeepAwake();
@@ -77,7 +90,7 @@ export default function App() {
 
   const connect = (targetIp: string) => {
     if (!targetIp) return;
-    
+
     setStatus("connecting");
     setCurrentView("gamepad");
 
@@ -145,12 +158,12 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       {currentView === "setup" ? (
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.setupContainer}
         >
           <Text style={styles.setupTitle}>Configurar Servidor de Juego</Text>
-          
+
           <View style={styles.inputWrapper}>
             <Text style={styles.protocolText}>ws://</Text>
             <TextInput
@@ -171,8 +184,8 @@ export default function App() {
       ) : (
         <View style={styles.container}>
           <View style={styles.header}>
-            <Pressable 
-              style={styles.backBtn} 
+            <Pressable
+              style={styles.backBtn}
               onPress={() => {
                 ws.current?.close();
                 setCurrentView("setup");
@@ -277,7 +290,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   connectBtnText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
-  
+
   container: {
     flex: 1,
     backgroundColor: "#676060",
@@ -318,7 +331,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   backBtnText: { color: "#ccc", fontSize: 12 },
-  
+
   controls: {
     flex: 1,
     flexDirection: "row",
@@ -332,8 +345,8 @@ const styles = StyleSheet.create({
     marginTop: 70,
   },
   right: {
-    marginRight: 130,
-    marginTop: 60,
+    marginRight: 110,
+    marginTop: 40,
   },
   btn: {
     backgroundColor: "#1e90ff",

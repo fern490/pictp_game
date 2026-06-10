@@ -16,7 +16,7 @@ const screens = new Set<string>();
 const players = new Map<string, Player>();
 
 const SPAWNS = [
-  { x: 150, y: 470 },
+  { x: 150, y: 500 },
   { x: 250, y: 460 },
   { x: 350, y: 550 },
   { x: 450, y: 550 },

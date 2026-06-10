@@ -26,7 +26,8 @@ type GameState = {
   buttonY: number;
   buttonPressed: boolean;
   buttonTimer: number;
-  buttonActive: boolean; 
+  buttonActive: boolean;
+  buttonPressedAt?: number;
 };
 
 type Platform = {
@@ -38,30 +39,26 @@ type Platform = {
 
 const COLORS = ["#FF5733", "#33FF57", "#3357FF", "#F3FF33"];
 
-// MAPA COMPACTO: Todo cabe dentro de una pantalla estándar sin scroll horizontal
 const LEVEL_PLATFORMS: Record<number, Platform[]> = {
   1: [
-    // --- Zona Izquierda de Inicio ---
-    { x: 30, y: 520, width: 180, height: 40 },  // Base de aparición
-    { x: 120, y: 390, width: 140, height: 40 }, // Escalón de subida izquierdo
-    
-    // --- Mecanismo Central (Botón e Impulso) ---
-    { x: 260, y: 290, width: 200, height: 40 }, // Plataforma alta del botón
-    { x: 320, y: 460, width: 160, height: 40 }, // Apoyo bajo el botón
-    
-    // --- Camino Fluyente hacia la Derecha ---
-    { x: 520, y: 410, width: 150, height: 40 }, // Escalón central derecho
-    { x: 780, y: 450, width: 160, height: 40 }, // Escalón previo a la meta
-    { x: 1140, y: 340, width: 180, height: 40 }, // ¡Plataforma final de la puerta!
+    { x: 30, y: 520, width: 180, height: 40 },
+    { x: 130, y: 420, width: 140, height: 40 },
+
+    { x: 260, y: 290, width: 200, height: 40 },
+    { x: 323, y: 278, width: 80, height: 12 },
+    { x: 320, y: 460, width: 160, height: 40 },
+
+    { x: 560, y: 410, width: 150, height: 40 },
+    { x: 780, y: 450, width: 160, height: 40 },
+    { x: 1140, y: 340, width: 180, height: 40 },
   ],
   2: [
-    // --- Nivel 2 Compacto ---
     { x: 30, y: 540, width: 160, height: 40 },
     { x: 120, y: 420, width: 140, height: 40 },
-    { x: 280, y: 310, width: 180, height: 40 }, // Botón Nivel 2
+    { x: 280, y: 310, width: 180, height: 40 },
     { x: 480, y: 440, width: 150, height: 40 },
     { x: 660, y: 350, width: 140, height: 40 },
-    { x: 840, y: 420, width: 180, height: 40 }, // Plataforma final Nivel 2
+    { x: 840, y: 420, width: 180, height: 40 },
   ],
 };
 
@@ -82,24 +79,23 @@ export default function App() {
     level: 1,
     keyCollected: false,
     keyX: 350,
-    keyY: 90,     
-    doorX: 1220, 
-    doorY: 280,   
+    keyY: 50,
+    doorX: 1220,
+    doorY: 280,
     keyCarrierId: null,
-    buttonX: 340,
-    buttonY: 270, 
+    buttonX: 385,
+    buttonY: 436,
     buttonPressed: false,
-    buttonTimer: 3,
+    buttonTimer: 5,
     buttonActive: false,
   });
 
   const playersRef = useRef<Player[]>([]);
   const gameStateRef = useRef<GameState>(gameState);
   const wsRef = useRef<WebSocket | null>(null);
-  const timerIntervalRef = useRef<any>(null); 
 
   const velocitiesRef = useRef<
-    Record<string, { vy: number; isGrounded: boolean }>
+    Record<string, { vy: number; isGrounded: boolean; isOnBoostPlatform: boolean }>
   >({});
 
   useEffect(() => {
@@ -123,7 +119,6 @@ export default function App() {
             );
             return {
               id: p.id,
-              // Los jugadores aparecen de forma segura en la nueva plataforma izquierda
               x: existingPlayer ? existingPlayer.x : 60,
               y: existingPlayer ? existingPlayer.y : 400,
               color: COLORS[index % COLORS.length],
@@ -147,7 +142,6 @@ export default function App() {
     return () => {
       ws.close();
       clearInterval(gameInterval);
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
   }, []);
 
@@ -155,30 +149,11 @@ export default function App() {
     if (gameStateRef.current.buttonPressed) return;
 
     gameStateRef.current.buttonPressed = true;
-    gameStateRef.current.buttonTimer = 3;
+    gameStateRef.current.buttonTimer = 5;
+    gameStateRef.current.buttonActive = false;
+    gameStateRef.current.buttonPressedAt = Date.now();
+    
     setGameState({ ...gameStateRef.current });
-
-    timerIntervalRef.current = setInterval(() => {
-      let currentGeo = { ...gameStateRef.current };
-      if (currentGeo.buttonTimer > 0) {
-        currentGeo.buttonTimer -= 1;
-      } else if (currentGeo.buttonTimer === 0 && !currentGeo.buttonActive) {
-        currentGeo.buttonActive = true;
-        
-        setTimeout(() => {
-          let resetGeo = { ...gameStateRef.current };
-          resetGeo.buttonPressed = false;
-          resetGeo.buttonActive = false;
-          resetGeo.buttonTimer = 3;
-          gameStateRef.current = resetGeo;
-          setGameState(resetGeo);
-        }, 1000);
-
-        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      }
-      gameStateRef.current = currentGeo;
-      setGameState(currentGeo);
-    }, 1000);
   };
 
   const updatePhysics = () => {
@@ -187,13 +162,29 @@ export default function App() {
 
     if (currentPlayers.length === 0) return;
 
+    if (currentGeo.buttonPressed && currentGeo.buttonPressedAt) {
+      const elapsedSeconds = (Date.now() - currentGeo.buttonPressedAt) / 1000;
+
+      if (elapsedSeconds < 5) {
+        currentGeo.buttonTimer = Math.ceil(5 - elapsedSeconds);
+        currentGeo.buttonActive = false;
+      } else if (elapsedSeconds >= 5 && elapsedSeconds < 6) {
+        currentGeo.buttonTimer = 0;
+        currentGeo.buttonActive = true;
+      } else {
+        currentGeo.buttonPressed = false;
+        currentGeo.buttonActive = false;
+        currentGeo.buttonTimer = 5;
+      }
+    }
+
     const platforms = LEVEL_PLATFORMS[currentGeo.level] || [];
     const PLAYER_SIZE = 30;
     const BUTTON_WIDTH = 40;
 
     currentPlayers = currentPlayers.map((player) => {
       if (!velocitiesRef.current[player.id]) {
-        velocitiesRef.current[player.id] = { vy: 0, isGrounded: false };
+        velocitiesRef.current[player.id] = { vy: 0, isGrounded: false, isOnBoostPlatform: false };
       }
 
       const physics = velocitiesRef.current[player.id];
@@ -203,8 +194,8 @@ export default function App() {
       if (player.input.left) nextX -= 5;
       if (player.input.right) nextX += 5;
 
-      const JUMP_FORCE = currentGeo.buttonActive ? -22 : -14;
-      
+      const JUMP_FORCE = (currentGeo.buttonActive && physics.isOnBoostPlatform) ? -27 : -14;
+
       if (player.input.jump && physics.isGrounded) {
         physics.vy = JUMP_FORCE;
         physics.isGrounded = false;
@@ -216,11 +207,9 @@ export default function App() {
       if (physics.vy > TERMINAL_VELOCITY) physics.vy = TERMINAL_VELOCITY;
 
       nextY += physics.vy;
-      
-      // Bloqueamos los bordes de la pantalla física para que nadie se salga de lo visible
+
       nextX = Math.max(0, Math.min(window.innerWidth - PLAYER_SIZE, nextX));
 
-      // Caída al vacío: Regresan al inicio (plataforma izquierda)
       const DEATH_ZONE_Y = window.innerHeight - 50;
       if (nextY >= DEATH_ZONE_Y) {
         nextX = 60;
@@ -239,10 +228,16 @@ export default function App() {
       }
 
       let groundedThisFrame = false;
+      let isOnBoostPlatform = false;
 
-      const matchButtonX = nextX + PLAYER_SIZE > currentGeo.buttonX && nextX < currentGeo.buttonX + BUTTON_WIDTH;
+      const matchButtonX =
+        nextX + PLAYER_SIZE > currentGeo.buttonX &&
+        nextX < currentGeo.buttonX + BUTTON_WIDTH;
       if (matchButtonX) {
-        if (player.y + PLAYER_SIZE <= currentGeo.buttonY && nextY + PLAYER_SIZE >= currentGeo.buttonY) {
+        if (
+          player.y + PLAYER_SIZE <= currentGeo.buttonY &&
+          nextY + PLAYER_SIZE >= currentGeo.buttonY
+        ) {
           nextY = currentGeo.buttonY - PLAYER_SIZE;
           physics.vy = 0;
           groundedThisFrame = true;
@@ -254,14 +249,25 @@ export default function App() {
       }
 
       for (const plat of platforms) {
-        const matchX = nextX + PLAYER_SIZE > plat.x && nextX < plat.x + plat.width;
+        const matchX =
+          nextX + PLAYER_SIZE > plat.x && nextX < plat.x + plat.width;
 
         if (matchX) {
-          if (player.y + PLAYER_SIZE <= plat.y && nextY + PLAYER_SIZE >= plat.y) {
+          if (
+            player.y + PLAYER_SIZE <= plat.y &&
+            nextY + PLAYER_SIZE >= plat.y
+          ) {
             nextY = plat.y - PLAYER_SIZE;
             physics.vy = 0;
             groundedThisFrame = true;
-          } else if (player.y >= plat.y + plat.height && nextY <= plat.y + plat.height) {
+
+            if (currentGeo.level === 1 && plat.x === 323 && plat.y === 278) {
+              isOnBoostPlatform = true;
+            }
+          } else if (
+            player.y >= plat.y + plat.height &&
+            nextY <= plat.y + plat.height
+          ) {
             nextY = plat.y + plat.height;
             physics.vy = 0;
           }
@@ -269,6 +275,7 @@ export default function App() {
       }
 
       physics.isGrounded = groundedThisFrame;
+      physics.isOnBoostPlatform = isOnBoostPlatform;
       return { ...player, x: nextX, y: nextY };
     });
 
@@ -293,7 +300,6 @@ export default function App() {
       }
     }
 
-    // Lógica de recolección de llave
     if (!currentGeo.keyCollected) {
       const luckyPlayer = currentPlayers.find(
         (p) =>
@@ -305,7 +311,9 @@ export default function App() {
         currentGeo.keyCarrierId = luckyPlayer.id;
       }
     } else {
-      const carrier = currentPlayers.find((p) => p.id === currentGeo.keyCarrierId);
+      const carrier = currentPlayers.find(
+        (p) => p.id === currentGeo.keyCarrierId,
+      );
       if (carrier) {
         currentGeo.keyX = carrier.x + 5;
         currentGeo.keyY = carrier.y - 25;
@@ -315,7 +323,6 @@ export default function App() {
       }
     }
 
-    // Puerta de salida
     if (currentGeo.keyCollected) {
       const allAtDoor = currentPlayers.every(
         (p) =>
@@ -328,12 +335,12 @@ export default function App() {
           currentGeo.level = 2;
           currentGeo.keyCollected = false;
           currentGeo.keyCarrierId = null;
-          currentGeo.keyX = 350; 
+          currentGeo.keyX = 350;
           currentGeo.keyY = 90;
-          currentGeo.doorX = 900; // Puerta nivel 2 compacta también
+          currentGeo.doorX = 900;
           currentGeo.doorY = 360;
         } else {
-          alert("¡Ganaron el juego completo!");
+          alert("¡Juego completo!");
           currentGeo.level = 1;
           currentGeo.keyCollected = false;
           currentGeo.keyCarrierId = null;
@@ -360,11 +367,10 @@ export default function App() {
         width: "100vw",
         height: "100vh",
         background: "linear-gradient(to bottom, #0b101e 0%, #1a2540 100%)",
-        overflow: "hidden", // <-- ELIMINADAS LAS BARRAS DE DESPLAZAMIENTO COMPLETAMENTE
+        overflow: "hidden",
         fontFamily: "sans-serif",
       }}
     >
-      {/* Estrellas */}
       {STARS.map((star, index) => (
         <div
           key={index}
@@ -383,7 +389,6 @@ export default function App() {
         </div>
       ))}
 
-      {/* Interfaz / HUD */}
       <div
         style={{
           position: "absolute",
@@ -396,42 +401,61 @@ export default function App() {
       >
         <h2 style={{ margin: 0, fontSize: 26 }}>NIVEL: {gameState.level}</h2>
         <p style={{ margin: "4px 0 0 0", fontWeight: "bold", fontSize: 13 }}>
-          {gameState.keyCollected ? "🔑 ¡Llave obtenida! Vayan a la puerta de la derecha" : ""}
+          {gameState.keyCollected
+            ? "🔑 ¡Llave obtenida! Vayan a la puerta de la derecha"
+            : ""}
         </p>
         {gameState.buttonPressed && (
-          <p style={{ margin: "4px 0 0 0", color: gameState.buttonActive ? "#4caf50" : "#ff9800", fontSize: 16, fontWeight: "bold" }}>
-            {gameState.buttonActive ? "🚀 ¡SUPER SALTO LISTO! ¡SALTA!" : `⏱️ IMPULSO EN: ${gameState.buttonTimer}...`}
+          <p
+            style={{
+              margin: "4px 0 0 0",
+              color: gameState.buttonActive ? "#4caf50" : "#ff9800",
+              fontSize: 16,
+              fontWeight: "bold",
+            }}
+          >
+            {gameState.buttonActive
+              ? "🚀 ¡SUPER SALTO LISTO! ¡SALTA EN LA PLATAFORMA GRIS!"
+              : `⏱️ IMPULSO EN: ${gameState.buttonTimer}...`}
           </p>
         )}
       </div>
 
-      {/* Plataformas */}
-      {(LEVEL_PLATFORMS[gameState.level] || []).map((plat, index) => (
-        <div
-          key={index}
-          style={{
-            position: "absolute",
-            left: plat.x,
-            top: plat.y,
-            width: plat.width,
-            height: plat.height,
-            background: "linear-gradient(to bottom, #a1d974 0%, #7cb64b 25%, #634631 30%, #4a3222 100%)",
-            borderRadius: "12px",
-            boxShadow: "0 12px 0px rgba(0,0,0,0.3), inset 0 4px 0 rgba(255,255,255,0.1)",
-            borderBottom: "6px solid #23160e",
-            zIndex: 2,
-          }}
-        />
-      ))}
+      {(LEVEL_PLATFORMS[gameState.level] || []).map((plat, index) => {
+        const isBoostPlatform =
+          gameState.level === 1 && plat.x === 323 && plat.y === 278;
 
-      {/* Botón Físico */}
+        return (
+          <div
+            key={index}
+            style={{
+              position: "absolute",
+              left: plat.x,
+              top: plat.y,
+              width: plat.width,
+              height: plat.height,
+              background: isBoostPlatform
+                ? "#888"
+                : "linear-gradient(to bottom, #a1d974 0%, #7cb64b 25%, #634631 30%, #4a3222 100%)",
+              borderRadius: "12px",
+              boxShadow: "0 12px 0px rgba(0,0,0,0.3)",
+              zIndex: 2,
+            }}
+          />
+        );
+      })}
+
       <div
         style={{
           position: "absolute",
           left: gameState.buttonX,
           top: gameState.buttonY,
           height: 20,
-          backgroundColor: gameState.buttonActive ? "#4caf50" : (gameState.buttonPressed ? "#ff9800" : "#f44336"),
+          backgroundColor: gameState.buttonActive
+            ? "#4caf50"
+            : gameState.buttonPressed
+              ? "#ff9800"
+              : "#f44336",
           borderRadius: "6px 6px 0 0",
           border: "2px solid #fff",
           boxShadow: "0 4px 8px rgba(0,0,0,0.4)",
@@ -447,7 +471,6 @@ export default function App() {
         {gameState.buttonPressed ? gameState.buttonTimer : "PUSH"}
       </div>
 
-      {/* Puerta a la Derecha Visible */}
       <div
         style={{
           position: "absolute",
@@ -460,15 +483,22 @@ export default function App() {
           borderRadius: "8px 8px 0 0",
           boxShadow: "0 8px 16px rgba(0,0,0,0.5)",
           zIndex: 3,
-          opacity: gameState.keyCollected ? 1 : 0.6
+          opacity: gameState.keyCollected ? 1 : 0.6,
         }}
       >
-        <div style={{ color: "white", fontSize: 9, textAlign: "center", marginTop: 20, fontWeight: "bold" }}>
+        <div
+          style={{
+            color: "white",
+            fontSize: 9,
+            textAlign: "center",
+            marginTop: 20,
+            fontWeight: "bold",
+          }}
+        >
           {gameState.keyCollected ? "OPEN" : "LOCK"}
         </div>
       </div>
 
-      {/* Llave Alta */}
       <div
         style={{
           position: "absolute",
@@ -481,7 +511,6 @@ export default function App() {
         🔑
       </div>
 
-      {/* Jugadores */}
       {players.map((p) => (
         <div
           key={p.id}
