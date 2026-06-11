@@ -43,23 +43,20 @@ const LEVEL_PLATFORMS: Record<number, Platform[]> = {
   1: [
     { x: 30, y: 520, width: 180, height: 40 },
     { x: 130, y: 420, width: 140, height: 40 },
-
     { x: 260, y: 290, width: 200, height: 40 },
     { x: 323, y: 278, width: 80, height: 12 },
     { x: 320, y: 460, width: 160, height: 40 },
-
     { x: 570, y: 410, width: 150, height: 40 },
     { x: 780, y: 450, width: 160, height: 40 },
     { x: 1140, y: 340, width: 180, height: 40 },
     { x: 886, y: 440, width: 50, height: 12 },
   ],
   2: [
-    { x: 30, y: 540, width: 160, height: 40 },
-    { x: 120, y: 420, width: 140, height: 40 },
-    { x: 280, y: 310, width: 180, height: 40 },
-    { x: 480, y: 440, width: 150, height: 40 },
-    { x: 660, y: 350, width: 140, height: 40 },
-    { x: 840, y: 420, width: 180, height: 40 },
+    { x: 1, y: 540, width: 2500, height: 40 },
+    
+    { x: 90, y: 420, width: 110, height: 30 }, 
+
+    { x: 0, y: 290, width: 45, height: 200 }, 
   ],
 };
 
@@ -294,8 +291,10 @@ export default function App() {
 
           const physics1 = velocitiesRef.current[p1.id];
 
-          const overlapX = p1.x + PLAYER_SIZE > p2.x && p1.x < p2.x + PLAYER_SIZE;
-          const overlapY = p1.y + PLAYER_SIZE > p2.y && p1.y < p2.y + PLAYER_SIZE;
+          const overlapX =
+            p1.x + PLAYER_SIZE > p2.x && p1.x < p2.x + PLAYER_SIZE;
+          const overlapY =
+            p1.y + PLAYER_SIZE > p2.y && p1.y < p2.y + PLAYER_SIZE;
 
           if (overlapX && overlapY) {
             const overlapLeft = p1.x + PLAYER_SIZE - p2.x;
@@ -311,7 +310,7 @@ export default function App() {
                 p1.y = p2.y - PLAYER_SIZE;
                 if (physics1) {
                   physics1.vy = 0;
-                  physics1.isGrounded = true; 
+                  physics1.isGrounded = true;
                 }
               }
             } else {
@@ -365,32 +364,58 @@ export default function App() {
       }
     }
 
-    if (currentGeo.keyCollected) {
-      const allAtDoor = currentPlayers.length === 2 && currentPlayers.every(
+    const allAtDoor =
+      currentPlayers.length === 1 &&
+      currentPlayers.every(
         (p) =>
           Math.abs(p.x - currentGeo.doorX) < 40 &&
           Math.abs(p.y - currentGeo.doorY) < 40,
       );
 
-      if (allAtDoor) {
-        if (currentGeo.level === 1) {
-          currentGeo.level = 2;
-          currentGeo.keyCollected = false;
-          currentGeo.keyCarrierId = null;
-          currentGeo.keyX = 350;
-          currentGeo.keyY = 90;
-          currentGeo.doorX = 900;
-          currentGeo.doorY = 360;
-        } else {
-          alert("¡Juego completo!");
-          currentGeo.level = 1;
-          currentGeo.keyCollected = false;
-          currentGeo.keyCarrierId = null;
-          currentGeo.keyX = 350;
-          currentGeo.keyY = 90;
-          currentGeo.doorX = 940;
-          currentGeo.doorY = 280;
-        }
+    if (allAtDoor) {
+      if (currentGeo.level === 1) {
+        currentGeo.level = 2;
+
+        currentGeo.keyCollected = false;
+        currentGeo.keyCarrierId = null;
+        currentGeo.keyX = 350;
+        currentGeo.keyY = 90;
+        currentGeo.doorX = 900;
+        currentGeo.doorY = 360;
+
+        currentGeo.buttonX = 2;
+        currentGeo.buttonY = 270;
+        currentGeo.buttonPressed = false;
+        currentGeo.buttonActive = false;
+        currentGeo.buttonTimer = 5;
+
+        currentPlayers = currentPlayers.map((player) => {
+          if (velocitiesRef.current[player.id]) {
+            velocitiesRef.current[player.id] = {
+              vy: 0,
+              isGrounded: false,
+              isOnBoostPlatform: false,
+            };
+          }
+          return { ...player, x: 60, y: 400 };
+        });
+
+      } else {
+        alert("¡Juego completo!");
+
+        currentGeo.level = 1;
+        currentGeo.keyCollected = false;
+        currentGeo.keyCarrierId = null;
+        currentGeo.keyX = 350;
+        currentGeo.keyY = 90;
+        currentGeo.doorX = 940;
+        currentGeo.doorY = 280;
+
+        currentGeo.buttonX = 385;
+        currentGeo.buttonY = 436;
+        currentGeo.buttonPressed = false;
+        currentGeo.buttonActive = false;
+        currentGeo.buttonTimer = 5;
       }
     }
 
@@ -399,6 +424,15 @@ export default function App() {
     setPlayers(currentPlayers);
     setGameState(currentGeo);
   };
+
+  const isCarrierAtDoor =
+    gameState.keyCollected &&
+    players.some(
+      (p) =>
+        p.id === gameState.keyCarrierId &&
+        Math.abs(p.x - gameState.doorX) < 40 &&
+        Math.abs(p.y - gameState.doorY) < 40,
+    );
 
   return (
     <div
@@ -467,6 +501,8 @@ export default function App() {
           ((plat.x === 323 && plat.y === 278) ||
             (plat.x === 886 && plat.y === 440));
 
+        const isLeftCustomPlatform = gameState.level === 2 && plat.x === 0;
+
         return (
           <div
             key={index}
@@ -478,8 +514,10 @@ export default function App() {
               height: plat.height,
               background: isBoostPlatform
                 ? "#888"
-                : "linear-gradient(to bottom, #a1d974 0%, #7cb64b 25%, #634631 30%, #4a3222 100%)",
-              borderRadius: "12px",
+                : isLeftCustomPlatform
+                  ? "linear-gradient(to right, #4a3222 0%, #634631 70%, #7cb64b 75%, #a1d974 100%)"
+                  : "linear-gradient(to bottom, #a1d974 0%, #7cb64b 25%, #634631 30%, #4a3222 100%)",
+              borderRadius: gameState.level === 1 ? "12px" : "0px",
               boxShadow: "0 12px 0px rgba(0,0,0,0.3)",
               zIndex: 2,
             }}
@@ -521,7 +559,7 @@ export default function App() {
           top: gameState.doorY,
           width: 50,
           height: 60,
-          backgroundColor: "#a05a2c",
+          backgroundColor: isCarrierAtDoor ? "#000000" : "#a05a2c",
           border: "3px solid #ffffff",
           borderRadius: "8px 8px 0 0",
           boxShadow: "0 8px 16px rgba(0,0,0,0.5)",
