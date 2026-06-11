@@ -54,7 +54,7 @@ function TouchButton({
 }
 
 export default function App() {
-  const [ip, setIp] = useState("10.56.2.81");
+  const [ip, setIp] = useState("10.56.2.34");
   const [currentView, setCurrentView] = useState<"setup" | "gamepad">("setup");
   const [status, setStatus] = useState<
     "disconnected" | "connecting" | "connected"
@@ -68,6 +68,7 @@ export default function App() {
   });
 
   const lastSentRef = useRef("___");
+  const blockedRef = useRef(false);
 
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
@@ -102,6 +103,8 @@ export default function App() {
     };
 
     socket.onclose = () => {
+      if (blockedRef.current) return;
+
       console.log("🔴 desconectado, reconectando...");
       setStatus("disconnected");
       setTimeout(() => connect(targetIp), 1500);
@@ -116,6 +119,12 @@ export default function App() {
         const data = JSON.parse(msg.data);
         if (data.type === "init") {
           console.log("🎮 ID asignado:", data.id);
+        }
+        if (data.type === "full") {
+          alert("La partida ya tiene 4 jugadores.");
+          blockedRef.current = true;
+          socket.close();
+          return;
         }
       } catch {}
     };
@@ -345,8 +354,8 @@ const styles = StyleSheet.create({
     marginTop: 70,
   },
   right: {
-    marginRight: 110,
-    marginTop: 40,
+    marginRight: 90,
+    marginTop: 23,
   },
   btn: {
     backgroundColor: "#1e90ff",
@@ -356,8 +365,8 @@ const styles = StyleSheet.create({
   },
   jumpBtn: {
     backgroundColor: "#ff3b30",
-    paddingVertical: 45,
-    paddingHorizontal: 40,
+    paddingVertical: 55,
+    paddingHorizontal: 45,
     borderRadius: 50,
   },
   glowWrapBlue: { alignItems: "center", justifyContent: "center" },
@@ -373,8 +382,8 @@ const styles = StyleSheet.create({
   },
   glowLayerRed: {
     position: "absolute",
-    width: 120,
-    height: 120,
+    width: 130,
+    height: 160,
     borderRadius: 50,
     backgroundColor: "#ff3b30",
     opacity: 0.3,

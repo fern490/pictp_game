@@ -88,6 +88,15 @@ Bun.serve({
         }
 
         if (!players.has(id) && !screens.has(id)) {
+          if (players.size >= 4) {
+            ws.send(JSON.stringify({ type: "full" }));
+            ws.close();
+
+            console.log(`🚫 Conexión rechazada: Servidor lleno (Máx 4)`);
+
+            return;
+          }
+
           const spawnIndex = players.size;
           const spawn = SPAWNS[spawnIndex % SPAWNS.length];
 
@@ -99,6 +108,7 @@ Bun.serve({
           });
 
           ws.send(JSON.stringify({ type: "init", id }));
+
           console.log(`🎮 Jugador ${spawnIndex + 1} registrado: ${id}`);
         }
 
@@ -109,12 +119,8 @@ Bun.serve({
           ...player.input,
           ...data,
         };
-        broadcastInput(player);
 
-        if (players.size >= 4) {
-          ws.send(JSON.stringify({ type: "full" }));
-          return;
-        }
+        broadcastInput(player);
       } catch (e) {
         console.error("❌ Error procesando mensaje:", e);
       }
@@ -122,17 +128,22 @@ Bun.serve({
 
     close(ws) {
       clients.delete(ws);
+
       const id = (ws as any).id;
 
       if (id) {
         const wasPlayer = players.has(id);
+
         players.delete(id);
         screens.delete(id);
+
         console.log(
           wasPlayer
             ? `🔴 Jugador desconectado: ${id}`
             : `🖥️  Pantalla desconectada: ${id}`,
         );
+
+        broadcast();
       }
     },
   },

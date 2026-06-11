@@ -48,9 +48,10 @@ const LEVEL_PLATFORMS: Record<number, Platform[]> = {
     { x: 323, y: 278, width: 80, height: 12 },
     { x: 320, y: 460, width: 160, height: 40 },
 
-    { x: 560, y: 410, width: 150, height: 40 },
+    { x: 570, y: 410, width: 150, height: 40 },
     { x: 780, y: 450, width: 160, height: 40 },
     { x: 1140, y: 340, width: 180, height: 40 },
+    { x: 886, y: 440, width: 50, height: 12 },
   ],
   2: [
     { x: 30, y: 540, width: 160, height: 40 },
@@ -95,7 +96,10 @@ export default function App() {
   const wsRef = useRef<WebSocket | null>(null);
 
   const velocitiesRef = useRef<
-    Record<string, { vy: number; isGrounded: boolean; isOnBoostPlatform: boolean }>
+    Record<
+      string,
+      { vy: number; isGrounded: boolean; isOnBoostPlatform: boolean }
+    >
   >({});
 
   useEffect(() => {
@@ -145,17 +149,6 @@ export default function App() {
     };
   }, []);
 
-  const pressButton = () => {
-    if (gameStateRef.current.buttonPressed) return;
-
-    gameStateRef.current.buttonPressed = true;
-    gameStateRef.current.buttonTimer = 5;
-    gameStateRef.current.buttonActive = false;
-    gameStateRef.current.buttonPressedAt = Date.now();
-    
-    setGameState({ ...gameStateRef.current });
-  };
-
   const updatePhysics = () => {
     let currentPlayers = [...playersRef.current];
     let currentGeo = { ...gameStateRef.current };
@@ -184,7 +177,11 @@ export default function App() {
 
     currentPlayers = currentPlayers.map((player) => {
       if (!velocitiesRef.current[player.id]) {
-        velocitiesRef.current[player.id] = { vy: 0, isGrounded: false, isOnBoostPlatform: false };
+        velocitiesRef.current[player.id] = {
+          vy: 0,
+          isGrounded: false,
+          isOnBoostPlatform: false,
+        };
       }
 
       const physics = velocitiesRef.current[player.id];
@@ -194,10 +191,8 @@ export default function App() {
       if (player.input.left) nextX -= 5;
       if (player.input.right) nextX += 5;
 
-      const JUMP_FORCE = (currentGeo.buttonActive && physics.isOnBoostPlatform) ? -27 : -14;
-
       if (player.input.jump && physics.isGrounded) {
-        physics.vy = JUMP_FORCE;
+        physics.vy = -14;
         physics.isGrounded = false;
       }
 
@@ -207,7 +202,6 @@ export default function App() {
       if (physics.vy > TERMINAL_VELOCITY) physics.vy = TERMINAL_VELOCITY;
 
       nextY += physics.vy;
-
       nextX = Math.max(0, Math.min(window.innerWidth - PLAYER_SIZE, nextX));
 
       const DEATH_ZONE_Y = window.innerHeight - 50;
@@ -243,7 +237,10 @@ export default function App() {
           groundedThisFrame = true;
 
           if (!currentGeo.buttonPressed) {
-            pressButton();
+            currentGeo.buttonPressed = true;
+            currentGeo.buttonTimer = 5;
+            currentGeo.buttonActive = false;
+            currentGeo.buttonPressedAt = Date.now();
           }
         }
       }
@@ -261,8 +258,16 @@ export default function App() {
             physics.vy = 0;
             groundedThisFrame = true;
 
-            if (currentGeo.level === 1 && plat.x === 323 && plat.y === 278) {
+            const isFirstBoost = plat.x === 323 && plat.y === 278;
+            const isSecondBoost = plat.x === 886 && plat.y === 440;
+
+            if (currentGeo.level === 1 && (isFirstBoost || isSecondBoost)) {
               isOnBoostPlatform = true;
+
+              if (currentGeo.buttonActive) {
+                physics.vy = -27;
+                groundedThisFrame = false;
+              }
             }
           } else if (
             player.y >= plat.y + plat.height &&
@@ -279,21 +284,58 @@ export default function App() {
       return { ...player, x: nextX, y: nextY };
     });
 
-    for (let i = 0; i < currentPlayers.length; i++) {
-      for (let j = 0; j < currentPlayers.length; j++) {
-        if (i === j) continue;
-        const p1 = currentPlayers[i];
-        const p2 = currentPlayers[j];
+    for (let loop = 0; loop < 3; loop++) {
+      for (let i = 0; i < currentPlayers.length; i++) {
+        for (let j = 0; j < currentPlayers.length; j++) {
+          if (i === j) continue;
 
-        const physics1 = velocitiesRef.current[p1.id];
-        const hitX = Math.abs(p1.x - p2.x) < PLAYER_SIZE;
+          const p1 = currentPlayers[i];
+          const p2 = currentPlayers[j];
 
-        if (hitX) {
-          if (p1.y + PLAYER_SIZE <= p2.y && p1.y + PLAYER_SIZE + 5 >= p2.y) {
-            p1.y = p2.y - PLAYER_SIZE;
-            if (physics1) {
-              physics1.vy = 0;
-              physics1.isGrounded = true;
+          const physics1 = velocitiesRef.current[p1.id];
+
+          const overlapX = p1.x + PLAYER_SIZE > p2.x && p1.x < p2.x + PLAYER_SIZE;
+          const overlapY = p1.y + PLAYER_SIZE > p2.y && p1.y < p2.y + PLAYER_SIZE;
+
+          if (overlapX && overlapY) {
+            const overlapLeft = p1.x + PLAYER_SIZE - p2.x;
+            const overlapRight = p2.x + PLAYER_SIZE - p1.x;
+            const overlapTop = p1.y + PLAYER_SIZE - p2.y;
+            const overlapBottom = p2.y + PLAYER_SIZE - p1.y;
+
+            const minX = Math.min(overlapLeft, overlapRight);
+            const minY = Math.min(overlapTop, overlapBottom);
+
+            if (minY < minX) {
+              if (p1.y < p2.y) {
+                p1.y = p2.y - PLAYER_SIZE;
+                if (physics1) {
+                  physics1.vy = 0;
+                  physics1.isGrounded = true; 
+                }
+              }
+            } else {
+              if (overlapLeft < overlapRight) {
+                if (p1.input.right && !p2.input.left) {
+                  p1.x = p2.x - PLAYER_SIZE;
+                } else if (p2.input.left && !p1.input.right) {
+                  p2.x = p1.x + PLAYER_SIZE;
+                } else {
+                  const mid = (p1.x + p2.x) / 2;
+                  p1.x = mid - PLAYER_SIZE / 2;
+                  p2.x = mid + PLAYER_SIZE / 2;
+                }
+              } else {
+                if (p1.input.left && !p2.input.right) {
+                  p1.x = p2.x + PLAYER_SIZE;
+                } else if (p2.input.right && !p1.input.left) {
+                  p2.x = p1.x - PLAYER_SIZE;
+                } else {
+                  const mid = (p1.x + p2.x) / 2;
+                  p2.x = mid - PLAYER_SIZE / 2;
+                  p1.x = mid + PLAYER_SIZE / 2;
+                }
+              }
             }
           }
         }
@@ -324,7 +366,7 @@ export default function App() {
     }
 
     if (currentGeo.keyCollected) {
-      const allAtDoor = currentPlayers.every(
+      const allAtDoor = currentPlayers.length === 2 && currentPlayers.every(
         (p) =>
           Math.abs(p.x - currentGeo.doorX) < 40 &&
           Math.abs(p.y - currentGeo.doorY) < 40,
@@ -401,9 +443,7 @@ export default function App() {
       >
         <h2 style={{ margin: 0, fontSize: 26 }}>NIVEL: {gameState.level}</h2>
         <p style={{ margin: "4px 0 0 0", fontWeight: "bold", fontSize: 13 }}>
-          {gameState.keyCollected
-            ? "🔑 ¡Llave obtenida! Vayan a la puerta de la derecha"
-            : ""}
+          {gameState.keyCollected ? "🔑 ¡Vayan a la salida!" : ""}
         </p>
         {gameState.buttonPressed && (
           <p
@@ -415,7 +455,7 @@ export default function App() {
             }}
           >
             {gameState.buttonActive
-              ? "🚀 ¡SUPER SALTO LISTO! ¡SALTA EN LA PLATAFORMA GRIS!"
+              ? "🚀 ¡VE A LA PLATAFORMA GRIS!"
               : `⏱️ IMPULSO EN: ${gameState.buttonTimer}...`}
           </p>
         )}
@@ -423,7 +463,9 @@ export default function App() {
 
       {(LEVEL_PLATFORMS[gameState.level] || []).map((plat, index) => {
         const isBoostPlatform =
-          gameState.level === 1 && plat.x === 323 && plat.y === 278;
+          gameState.level === 1 &&
+          ((plat.x === 323 && plat.y === 278) ||
+            (plat.x === 886 && plat.y === 440));
 
         return (
           <div
@@ -450,6 +492,7 @@ export default function App() {
           position: "absolute",
           left: gameState.buttonX,
           top: gameState.buttonY,
+          width: 40,
           height: 20,
           backgroundColor: gameState.buttonActive
             ? "#4caf50"
@@ -479,7 +522,7 @@ export default function App() {
           width: 50,
           height: 60,
           backgroundColor: "#a05a2c",
-          border: "3px solid #fff",
+          border: "3px solid #ffffff",
           borderRadius: "8px 8px 0 0",
           boxShadow: "0 8px 16px rgba(0,0,0,0.5)",
           zIndex: 3,
@@ -495,7 +538,7 @@ export default function App() {
             fontWeight: "bold",
           }}
         >
-          {gameState.keyCollected ? "OPEN" : "LOCK"}
+          {gameState.keyCollected ? "OPEN" : "SALIR"}
         </div>
       </div>
 
