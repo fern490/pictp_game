@@ -12,10 +12,7 @@ import { StatusBar } from "expo-status-bar";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import {
-  GestureHandlerRootView,
-  PanGestureHandler,
-  State,
-} from "react-native-gesture-handler";
+  GestureHandlerRootView, State, PanGestureHandler} from "react-native-gesture-handler";
 
 function TouchButton({
   label,
@@ -54,7 +51,7 @@ function TouchButton({
 }
 
 export default function App() {
-  const [ip, setIp] = useState("10.56.2.34");
+  const [ip, setIp] = useState("10.56.2.35");
   const [currentView, setCurrentView] = useState<"setup" | "gamepad">("setup");
   const [status, setStatus] = useState<
     "disconnected" | "connecting" | "connected"

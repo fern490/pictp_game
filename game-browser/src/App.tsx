@@ -53,10 +53,10 @@ const LEVEL_PLATFORMS: Record<number, Platform[]> = {
   ],
   2: [
     { x: 1, y: 540, width: 2500, height: 40 },
-    
-    { x: 90, y: 420, width: 110, height: 30 }, 
 
-    { x: 0, y: 290, width: 45, height: 200 }, 
+    { x: 250, y: 130, width: 380, height: 30 },
+
+    { x: 0, y: 290, width: 45, height: 200 },
   ],
 };
 
@@ -74,7 +74,7 @@ const STARS = [
 export default function App() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [gameState, setGameState] = useState<GameState>({
-    level: 1,
+    level: 2,
     keyCollected: false,
     keyX: 350,
     keyY: 50,
@@ -91,6 +91,7 @@ export default function App() {
   const playersRef = useRef<Player[]>([]);
   const gameStateRef = useRef<GameState>(gameState);
   const wsRef = useRef<WebSocket | null>(null);
+  const DEBUG_SINGLE_PLAYER = true;
 
   const velocitiesRef = useRef<
     Record<
@@ -188,15 +189,23 @@ export default function App() {
       if (player.input.left) nextX -= 5;
       if (player.input.right) nextX += 5;
 
-      if (player.input.jump && physics.isGrounded) {
+      if (player.input.jump && physics.isGrounded && physics.vy === 0) {
         physics.vy = -14;
         physics.isGrounded = false;
       }
 
       const GRAVITY = 0.8;
       const TERMINAL_VELOCITY = 12;
+
       physics.vy += GRAVITY;
-      if (physics.vy > TERMINAL_VELOCITY) physics.vy = TERMINAL_VELOCITY;
+
+      if (physics.vy > TERMINAL_VELOCITY) {
+        physics.vy = TERMINAL_VELOCITY;
+      }
+
+      if (physics.vy > TERMINAL_VELOCITY) {
+        physics.vy = TERMINAL_VELOCITY;
+      }
 
       nextY += physics.vy;
       nextX = Math.max(0, Math.min(window.innerWidth - PLAYER_SIZE, nextX));
@@ -281,63 +290,61 @@ export default function App() {
       return { ...player, x: nextX, y: nextY };
     });
 
-    for (let loop = 0; loop < 3; loop++) {
+    for (let loop = 0; loop < 10; loop++) {
+      let changed = false;
+
       for (let i = 0; i < currentPlayers.length; i++) {
         for (let j = 0; j < currentPlayers.length; j++) {
           if (i === j) continue;
 
-          const p1 = currentPlayers[i];
-          const p2 = currentPlayers[j];
+          const upper = currentPlayers[i];
+          const lower = currentPlayers[j];
 
-          const physics1 = velocitiesRef.current[p1.id];
+          const upperPhysics = velocitiesRef.current[upper.id];
+
+          const lowerPhysics = velocitiesRef.current[lower.id];
 
           const overlapX =
-            p1.x + PLAYER_SIZE > p2.x && p1.x < p2.x + PLAYER_SIZE;
-          const overlapY =
-            p1.y + PLAYER_SIZE > p2.y && p1.y < p2.y + PLAYER_SIZE;
+            upper.x + PLAYER_SIZE > lower.x + 4 &&
+            upper.x < lower.x + PLAYER_SIZE - 4;
 
-          if (overlapX && overlapY) {
-            const overlapLeft = p1.x + PLAYER_SIZE - p2.x;
-            const overlapRight = p2.x + PLAYER_SIZE - p1.x;
-            const overlapTop = p1.y + PLAYER_SIZE - p2.y;
-            const overlapBottom = p2.y + PLAYER_SIZE - p1.y;
+          const verticalGap = upper.y + PLAYER_SIZE - lower.y;
 
-            const minX = Math.min(overlapLeft, overlapRight);
-            const minY = Math.min(overlapTop, overlapBottom);
+          const stacked = verticalGap > -4 && verticalGap < 18;
 
-            if (minY < minX) {
-              if (p1.y < p2.y) {
-                p1.y = p2.y - PLAYER_SIZE;
-                if (physics1) {
-                  physics1.vy = 0;
-                  physics1.isGrounded = true;
-                }
-              }
+          if (overlapX && stacked) {
+            upper.y = lower.y - PLAYER_SIZE;
+
+            if (lowerPhysics?.vy < 0) {
+              upperPhysics.vy = lowerPhysics.vy;
+
+              upperPhysics.isGrounded = false;
             } else {
-              if (overlapLeft < overlapRight) {
-                if (p1.input.right && !p2.input.left) {
-                  p1.x = p2.x - PLAYER_SIZE;
-                } else if (p2.input.left && !p1.input.right) {
-                  p2.x = p1.x + PLAYER_SIZE;
-                } else {
-                  const mid = (p1.x + p2.x) / 2;
-                  p1.x = mid - PLAYER_SIZE / 2;
-                  p2.x = mid + PLAYER_SIZE / 2;
-                }
-              } else {
-                if (p1.input.left && !p2.input.right) {
-                  p1.x = p2.x + PLAYER_SIZE;
-                } else if (p2.input.right && !p1.input.left) {
-                  p2.x = p1.x - PLAYER_SIZE;
-                } else {
-                  const mid = (p1.x + p2.x) / 2;
-                  p2.x = mid - PLAYER_SIZE / 2;
-                  p1.x = mid + PLAYER_SIZE / 2;
-                }
-              }
+              upperPhysics.vy = 0;
+
+              upperPhysics.isGrounded = true;
             }
+
+            changed = true;
+          }
+
+          const overlapY =
+            upper.y + PLAYER_SIZE > lower.y && upper.y < lower.y + PLAYER_SIZE;
+
+          if (overlapX && overlapY && verticalGap <= -5) {
+            const centerUpper = upper.x + PLAYER_SIZE / 2;
+
+            const centerLower = lower.x + PLAYER_SIZE / 2;
+
+            const push = centerUpper < centerLower ? -1 : 1;
+
+            upper.x += push * 0.5;
           }
         }
+      }
+
+      if (!changed) {
+        break;
       }
     }
 
@@ -363,14 +370,20 @@ export default function App() {
         currentGeo.keyCarrierId = null;
       }
     }
+    const connectedPlayers = currentPlayers.filter(
+      (p) => p.id && p.id.trim() !== "",
+    );
 
-    const allAtDoor =
-      currentPlayers.length === 1 &&
-      currentPlayers.every(
-        (p) =>
-          Math.abs(p.x - currentGeo.doorX) < 40 &&
-          Math.abs(p.y - currentGeo.doorY) < 40,
-      );
+    const playersAtDoor = connectedPlayers.filter(
+      (p) =>
+        Math.abs(p.x - currentGeo.doorX) < 40 &&
+        Math.abs(p.y - currentGeo.doorY) < 40,
+    );
+
+    const allAtDoor = DEBUG_SINGLE_PLAYER
+      ? playersAtDoor.length >= 1
+      : connectedPlayers.length > 0 &&
+        playersAtDoor.length === connectedPlayers.length;
 
     if (allAtDoor) {
       if (currentGeo.level === 1) {
@@ -383,8 +396,8 @@ export default function App() {
         currentGeo.doorX = 900;
         currentGeo.doorY = 360;
 
-        currentGeo.buttonX = 2;
-        currentGeo.buttonY = 270;
+        currentGeo.buttonX = 130;
+        currentGeo.buttonY = 350;
         currentGeo.buttonPressed = false;
         currentGeo.buttonActive = false;
         currentGeo.buttonTimer = 5;
@@ -399,7 +412,6 @@ export default function App() {
           }
           return { ...player, x: 60, y: 400 };
         });
-
       } else {
         alert("¡Juego completo!");
 
@@ -489,7 +501,7 @@ export default function App() {
             }}
           >
             {gameState.buttonActive
-              ? "🚀 ¡VE A LA PLATAFORMA GRIS!"
+              ? "🚀 ¡VE!"
               : `⏱️ IMPULSO EN: ${gameState.buttonTimer}...`}
           </p>
         )}
