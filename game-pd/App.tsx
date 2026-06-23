@@ -51,7 +51,7 @@ function TouchButton({
 }
 
 export default function App() {
-  const [ip, setIp] = useState("10.56.2.35");
+  const [ip, setIp] = useState("10.56.2.65");
   const [currentView, setCurrentView] = useState<"setup" | "gamepad">("setup");
   const [status, setStatus] = useState<
     "disconnected" | "connecting" | "connected"

@@ -41,26 +41,52 @@ type Platform = {
   height: number;
 };
 
+type LevelConfig = {
+  platforms: Platform[];
+  keyStartX: number;
+  keyStartY: number;
+  doorX: number;
+  doorY: number;
+  buttonX: number;
+  buttonY: number;
+};
+
 const COLORS = ["#FF5733", "#33FF57", "#3357FF", "#F3FF33"];
 
-const LEVEL_PLATFORMS: Record<number, Platform[]> = {
-  1: [
-    { x: 30, y: 520, width: 180, height: 40 },
-    { x: 130, y: 420, width: 140, height: 40 },
-    { x: 260, y: 290, width: 200, height: 40 },
-    { x: 323, y: 278, width: 80, height: 12 },
-    { x: 320, y: 460, width: 160, height: 40 },
-    { x: 570, y: 410, width: 150, height: 40 },
-    { x: 780, y: 450, width: 160, height: 40 },
-    { x: 1140, y: 340, width: 180, height: 40 },
-    { x: 886, y: 440, width: 50, height: 12 },
-  ],
-  2: [
-    { x: 1, y: 540, width: 2500, height: 40 },
-    { x: 250, y: 130, width: 380, height: 30 },
-    { x: 0, y: 250, width: 45, height: 220 },
-    { x: 100, y: 531, width: 80, height: 12 },
-  ],
+const LEVEL_CONFIGS: Record<number, LevelConfig> = {
+  1: {
+    platforms: [
+      { x: 30, y: 520, width: 180, height: 40 },
+      { x: 130, y: 420, width: 140, height: 40 },
+      { x: 260, y: 290, width: 200, height: 40 },
+      { x: 323, y: 278, width: 80, height: 12 },
+      { x: 320, y: 460, width: 160, height: 40 },
+      { x: 570, y: 410, width: 150, height: 40 },
+      { x: 780, y: 450, width: 160, height: 40 },
+      { x: 1140, y: 340, width: 180, height: 40 },
+      { x: 886, y: 440, width: 50, height: 12 },
+    ],
+    keyStartX: 350,
+    keyStartY: 90,
+    doorX: 1200,
+    doorY: 276,
+    buttonX: 376,
+    buttonY: 442,
+  },
+  2: {
+    platforms: [
+      { x: 1, y: 540, width: 2500, height: 40 },
+      { x: 250, y: 130, width: 380, height: 30 },
+      { x: 0, y: 250, width: 45, height: 220 },
+      { x: 100, y: 531, width: 80, height: 12 },
+    ],
+    keyStartX: 900,
+    keyStartY: 150,
+    doorX: 1220,
+    doorY: 280,
+    buttonX: 59,
+    buttonY: 300,
+  },
 };
 
 const STARS = [
@@ -76,16 +102,17 @@ const STARS = [
 
 export default function App() {
   const [players, setPlayers] = useState<Player[]>([]);
+
   const [gameState, setGameState] = useState<GameState>({
-    level: 2,
+    level: 1,
     keyCollected: false,
-    keyX: 350,
-    keyY: 30,
-    doorX: 1220,
-    doorY: 280,
+    keyX: LEVEL_CONFIGS[1].keyStartX,
+    keyY: LEVEL_CONFIGS[1].keyStartY,
+    doorX: LEVEL_CONFIGS[1].doorX,
+    doorY: LEVEL_CONFIGS[1].doorY,
     keyCarrierId: null,
-    buttonX: 44,
-    buttonY: 270,
+    buttonX: LEVEL_CONFIGS[1].buttonX,
+    buttonY: LEVEL_CONFIGS[1].buttonY,
     buttonPressed: false,
     buttonTimer: 5,
     buttonActive: false,
@@ -98,7 +125,7 @@ export default function App() {
   const playersRef = useRef<Player[]>([]);
   const gameStateRef = useRef<GameState>(gameState);
   const wsRef = useRef<WebSocket | null>(null);
-  const DEBUG_SINGLE_PLAYER = true;
+  const DEBUG_SINGLE_PLAYER = false;
 
   const velocitiesRef = useRef<
     Record<
@@ -176,10 +203,110 @@ export default function App() {
       }
     }
 
-    const platforms = LEVEL_PLATFORMS[currentGeo.level] || [];
+    const currentLevelConfig = LEVEL_CONFIGS[currentGeo.level];
+    const platforms = currentLevelConfig?.platforms || [];
     const PLAYER_SIZE = 30;
-    const BUTTON_WIDTH = 40;
+    const BOX_SIZE = 40;
 
+    // --- FÍSICA Y MECÁNICA DE LA CAJA (NIVEL 2) ---
+    if (currentGeo.level === 2 && currentGeo.boxDropped) {
+      let totalPush = 0;
+
+      currentPlayers.forEach((player) => {
+        const vOverlap =
+          player.y + PLAYER_SIZE > currentGeo.boxY &&
+          player.y < currentGeo.boxY + BOX_SIZE;
+
+        if (vOverlap) {
+          if (
+            player.input.right &&
+            player.x + PLAYER_SIZE <= currentGeo.boxX + 6 &&
+            player.x + PLAYER_SIZE >= currentGeo.boxX - 6
+          ) {
+            totalPush += 5;
+          }
+          if (
+            player.input.left &&
+            player.x >= currentGeo.boxX + BOX_SIZE - 6 &&
+            player.x <= currentGeo.boxX + BOX_SIZE + 6
+          ) {
+            totalPush -= 5;
+          }
+        }
+      });
+
+      let nextBoxX = currentGeo.boxX + totalPush;
+      nextBoxX = Math.max(0, Math.min(window.innerWidth - BOX_SIZE, nextBoxX));
+
+      const BOX_GRAVITY = 0.8;
+      const BOX_TERMINAL_VELOCITY = 12;
+      currentGeo.boxVelocityY += BOX_GRAVITY;
+      if (currentGeo.boxVelocityY > BOX_TERMINAL_VELOCITY) {
+        currentGeo.boxVelocityY = BOX_TERMINAL_VELOCITY;
+      }
+      let nextBoxY = currentGeo.boxY + currentGeo.boxVelocityY;
+
+      for (const plat of platforms) {
+        if (nextBoxX + BOX_SIZE > plat.x && nextBoxX < plat.x + plat.width) {
+          if (
+            currentGeo.boxY + BOX_SIZE <= plat.y &&
+            nextBoxY + BOX_SIZE >= plat.y
+          ) {
+            nextBoxY = plat.y - BOX_SIZE;
+            currentGeo.boxVelocityY = 0;
+          } else if (
+            currentGeo.boxY >= plat.y + plat.height &&
+            nextBoxY <= plat.y + plat.height
+          ) {
+            nextBoxY = plat.y + plat.height;
+            currentGeo.boxVelocityY = 0;
+          }
+        }
+        if (nextBoxY + BOX_SIZE > plat.y && nextBoxY < plat.y + plat.height) {
+          if (
+            totalPush > 0 &&
+            currentGeo.boxX + BOX_SIZE <= plat.x &&
+            nextBoxX + BOX_SIZE > plat.x
+          ) {
+            nextBoxX = plat.x - BOX_SIZE;
+          } else if (
+            totalPush < 0 &&
+            currentGeo.boxX >= plat.x + plat.width &&
+            nextBoxX < plat.x + plat.width
+          ) {
+            nextBoxX = plat.x + plat.width;
+          }
+        }
+      }
+
+      currentPlayers.forEach((player) => {
+        const vOverlap =
+          player.y + PLAYER_SIZE > nextBoxY && player.y < nextBoxY + BOX_SIZE;
+
+        if (vOverlap) {
+          if (
+            totalPush > 0 &&
+            currentGeo.boxX + BOX_SIZE <= player.x &&
+            nextBoxX + BOX_SIZE > player.x
+          ) {
+            player.x = nextBoxX + BOX_SIZE;
+            player.x = Math.min(window.innerWidth - PLAYER_SIZE, player.x);
+          } else if (
+            totalPush < 0 &&
+            currentGeo.boxX >= player.x + PLAYER_SIZE &&
+            nextBoxX < player.x + PLAYER_SIZE
+          ) {
+            player.x = nextBoxX - PLAYER_SIZE;
+            player.x = Math.max(0, player.x);
+          }
+        }
+      });
+
+      currentGeo.boxX = nextBoxX;
+      currentGeo.boxY = nextBoxY;
+    }
+
+    // --- FÍSICA Y MOVIMIENTO DE JUGADORES ---
     currentPlayers = currentPlayers.map((player) => {
       if (!velocitiesRef.current[player.id]) {
         velocitiesRef.current[player.id] = {
@@ -203,12 +330,7 @@ export default function App() {
 
       const GRAVITY = 0.8;
       const TERMINAL_VELOCITY = 12;
-
       physics.vy += GRAVITY;
-
-      if (physics.vy > TERMINAL_VELOCITY) {
-        physics.vy = TERMINAL_VELOCITY;
-      }
 
       if (physics.vy > TERMINAL_VELOCITY) {
         physics.vy = TERMINAL_VELOCITY;
@@ -217,6 +339,7 @@ export default function App() {
       nextY += physics.vy;
       nextX = Math.max(0, Math.min(window.innerWidth - PLAYER_SIZE, nextX));
 
+      // Zona de muerte
       const DEATH_ZONE_Y = window.innerHeight - 50;
       if (nextY >= DEATH_ZONE_Y) {
         nextX = 60;
@@ -227,8 +350,8 @@ export default function App() {
         if (currentGeo.keyCarrierId === player.id) {
           currentGeo.keyCollected = false;
           currentGeo.keyCarrierId = null;
-          currentGeo.keyX = 350;
-          currentGeo.keyY = 90;
+          currentGeo.keyX = LEVEL_CONFIGS[currentGeo.level].keyStartX;
+          currentGeo.keyY = LEVEL_CONFIGS[currentGeo.level].keyStartY;
         }
 
         return { ...player, x: nextX, y: nextY };
@@ -237,44 +360,89 @@ export default function App() {
       let groundedThisFrame = false;
       let isOnBoostPlatform = false;
 
+      // --- NUEVO SISTEMA DE OBSTÁCULOS (PLATAFORMAS + BOTÓN HORIZONTAL SÓLIDO) ---
+      const BTN_W = 45;
+      const BTN_H = 15;
+
+      const obstacles = [
+        ...platforms,
+        {
+          x: currentGeo.buttonX,
+          y: currentGeo.buttonY,
+          width: BTN_W,
+          height: BTN_H,
+        },
+      ];
+
+      // Verificación de Overlap para activar el botón
       const matchButtonX =
         nextX + PLAYER_SIZE > currentGeo.buttonX &&
-        nextX < currentGeo.buttonX + BUTTON_WIDTH;
-      if (matchButtonX) {
-        if (
-          player.y + PLAYER_SIZE <= currentGeo.buttonY &&
-          nextY + PLAYER_SIZE >= currentGeo.buttonY
-        ) {
-          nextY = currentGeo.buttonY - PLAYER_SIZE;
-          physics.vy = 0;
-          groundedThisFrame = true;
+        nextX < currentGeo.buttonX + BTN_W;
+      const matchButtonY =
+        nextY + PLAYER_SIZE > currentGeo.buttonY &&
+        nextY < currentGeo.buttonY + BTN_H;
 
-          if (!currentGeo.buttonPressed) {
-            currentGeo.buttonPressed = true;
-            currentGeo.buttonTimer = 5;
-            currentGeo.buttonActive = false;
-            currentGeo.buttonPressedAt = Date.now();
+      if (matchButtonX && matchButtonY) {
+        if (!currentGeo.buttonPressed) {
+          currentGeo.buttonPressed = true;
+          currentGeo.buttonTimer = 5;
+          currentGeo.buttonActive = false;
+          currentGeo.buttonPressedAt = Date.now();
+
+          if (currentGeo.level === 2) {
+            currentGeo.boxDropped = true;
           }
         }
       }
 
-      for (const plat of platforms) {
-        const matchX =
-          nextX + PLAYER_SIZE > plat.x && nextX < plat.x + plat.width;
+      if (currentGeo.level === 2 && currentGeo.boxDropped) {
+        const matchBoxX =
+          nextX + PLAYER_SIZE > currentGeo.boxX &&
+          nextX < currentGeo.boxX + BOX_SIZE;
+        if (matchBoxX) {
+          if (
+            player.y + PLAYER_SIZE <= currentGeo.boxY &&
+            nextY + PLAYER_SIZE >= currentGeo.boxY
+          ) {
+            nextY = currentGeo.boxY - PLAYER_SIZE;
+            physics.vy = 0;
+            groundedThisFrame = true;
+          } else if (
+            player.y >= currentGeo.boxY + BOX_SIZE &&
+            nextY <= currentGeo.boxY + BOX_SIZE
+          ) {
+            nextY = currentGeo.boxY + BOX_SIZE;
+            physics.vy = 0;
+          } else if (
+            player.y + PLAYER_SIZE > currentGeo.boxY &&
+            player.y < currentGeo.boxY + BOX_SIZE
+          ) {
+            if (player.x + PLAYER_SIZE <= currentGeo.boxX) {
+              nextX = currentGeo.boxX - PLAYER_SIZE;
+            } else if (player.x >= currentGeo.boxX + BOX_SIZE) {
+              nextX = currentGeo.boxX + BOX_SIZE;
+            }
+          }
+        }
+      }
+
+      for (const obs of obstacles) {
+        const matchX = nextX + PLAYER_SIZE > obs.x && nextX < obs.x + obs.width;
 
         if (matchX) {
-          if (
-            player.y + PLAYER_SIZE <= plat.y &&
-            nextY + PLAYER_SIZE >= plat.y
-          ) {
-            nextY = plat.y - PLAYER_SIZE;
+          if (player.y + PLAYER_SIZE <= obs.y && nextY + PLAYER_SIZE >= obs.y) {
+            nextY = obs.y - PLAYER_SIZE;
             physics.vy = 0;
             groundedThisFrame = true;
 
-            const isFirstBoost = plat.x === 323 && plat.y === 278;
-            const isSecondBoost = plat.x === 886 && plat.y === 440;
+            const isLevel1Boost =
+              currentGeo.level === 1 &&
+              ((obs.x === 323 && obs.y === 278) ||
+                (obs.x === 886 && obs.y === 440));
+            const isLevel2Boost =
+              currentGeo.level === 2 && obs.x === 100 && obs.y === 531;
 
-            if (currentGeo.level === 1 && (isFirstBoost || isSecondBoost)) {
+            if (isLevel1Boost || isLevel2Boost) {
               isOnBoostPlatform = true;
 
               if (currentGeo.buttonActive) {
@@ -283,11 +451,27 @@ export default function App() {
               }
             }
           } else if (
-            player.y >= plat.y + plat.height &&
-            nextY <= plat.y + plat.height
+            player.y >= obs.y + obs.height &&
+            nextY <= obs.y + obs.height
           ) {
-            nextY = plat.y + plat.height;
+            nextY = obs.y + obs.height;
             physics.vy = 0;
+          }
+        }
+      }
+
+      for (const obs of obstacles) {
+        const matchY =
+          nextY + PLAYER_SIZE > obs.y && nextY < obs.y + obs.height;
+
+        if (matchY) {
+          if (player.x + PLAYER_SIZE <= obs.x && nextX + PLAYER_SIZE > obs.x) {
+            nextX = obs.x - PLAYER_SIZE;
+          } else if (
+            player.x >= obs.x + obs.width &&
+            nextX < obs.x + obs.width
+          ) {
+            nextX = obs.x + obs.width;
           }
         }
       }
@@ -297,9 +481,9 @@ export default function App() {
       return { ...player, x: nextX, y: nextY };
     });
 
+    // Colisiones entre jugadores
     for (let loop = 0; loop < 10; loop++) {
       let changed = false;
-
       for (let i = 0; i < currentPlayers.length; i++) {
         for (let j = i + 1; j < currentPlayers.length; j++) {
           const p1 = currentPlayers[i];
@@ -322,7 +506,6 @@ export default function App() {
             if (overlapY <= overlapX + 4) {
               const upper = p1.y < p2.y ? p1 : p2;
               const lower = p1.y < p2.y ? p2 : p1;
-
               const upperPhysics = velocitiesRef.current[upper.id];
               const lowerPhysics = velocitiesRef.current[lower.id];
 
@@ -343,7 +526,6 @@ export default function App() {
             } else {
               const leftPlayer = p1.x < p2.x ? p1 : p2;
               const rightPlayer = p1.x < p2.x ? p2 : p1;
-
               const pushAmount = overlapX / 2;
               leftPlayer.x -= pushAmount;
               rightPlayer.x += pushAmount;
@@ -353,18 +535,15 @@ export default function App() {
                 window.innerWidth - PLAYER_SIZE,
                 rightPlayer.x,
               );
-
               changed = true;
             }
           }
         }
       }
-
-      if (!changed) {
-        break;
-      }
+      if (!changed) break;
     }
 
+    // Lógica de recolectar la llave
     if (!currentGeo.keyCollected) {
       const luckyPlayer = currentPlayers.find(
         (p) =>
@@ -387,20 +566,27 @@ export default function App() {
         currentGeo.keyCarrierId = null;
       }
     }
+
+    // --- REGLAS DE CAMBIO DE NIVEL (TODOS EN PUERTA + PORTADOR DE LLAVE) ---
     const connectedPlayers = currentPlayers.filter(
       (p) => p.id && p.id.trim() !== "",
     );
-
     const playersAtDoor = connectedPlayers.filter(
       (p) =>
         Math.abs(p.x - currentGeo.doorX) < 40 &&
         Math.abs(p.y - currentGeo.doorY) < 40,
     );
 
+    // Verificación exacta: la llave está recolectada y su portador llegó a la puerta
+    const isCarrierAtDoorWithKey =
+      currentGeo.keyCollected &&
+      playersAtDoor.some((p) => p.id === currentGeo.keyCarrierId);
+
     const allAtDoor = DEBUG_SINGLE_PLAYER
-      ? playersAtDoor.length >= 1
+      ? playersAtDoor.length >= 1 && isCarrierAtDoorWithKey
       : connectedPlayers.length > 0 &&
-        playersAtDoor.length === connectedPlayers.length;
+        playersAtDoor.length === connectedPlayers.length &&
+        isCarrierAtDoorWithKey;
 
     if (allAtDoor) {
       if (currentGeo.level === 1) {
@@ -408,16 +594,21 @@ export default function App() {
 
         currentGeo.keyCollected = false;
         currentGeo.keyCarrierId = null;
-        currentGeo.keyX = 350;
-        currentGeo.keyY = 90;
-        currentGeo.doorX = 900;
-        currentGeo.doorY = 360;
+        currentGeo.keyX = LEVEL_CONFIGS[2].keyStartX;
+        currentGeo.keyY = LEVEL_CONFIGS[2].keyStartY;
+        currentGeo.doorX = LEVEL_CONFIGS[2].doorX;
+        currentGeo.doorY = LEVEL_CONFIGS[2].doorY;
+        currentGeo.buttonX = LEVEL_CONFIGS[2].buttonX;
+        currentGeo.buttonY = LEVEL_CONFIGS[2].buttonY;
 
-        currentGeo.buttonX = 130;
-        currentGeo.buttonY = 350;
         currentGeo.buttonPressed = false;
         currentGeo.buttonActive = false;
         currentGeo.buttonTimer = 5;
+
+        currentGeo.boxX = 320;
+        currentGeo.boxY = -60;
+        currentGeo.boxVelocityY = 0;
+        currentGeo.boxDropped = false;
 
         currentPlayers = currentPlayers.map((player) => {
           if (velocitiesRef.current[player.id]) {
@@ -431,20 +622,25 @@ export default function App() {
         });
       } else {
         alert("¡Juego completo!");
-
         currentGeo.level = 1;
+
         currentGeo.keyCollected = false;
         currentGeo.keyCarrierId = null;
-        currentGeo.keyX = 350;
-        currentGeo.keyY = 90;
-        currentGeo.doorX = 940;
-        currentGeo.doorY = 280;
+        currentGeo.keyX = LEVEL_CONFIGS[1].keyStartX;
+        currentGeo.keyY = LEVEL_CONFIGS[1].keyStartY;
+        currentGeo.doorX = LEVEL_CONFIGS[1].doorX;
+        currentGeo.doorY = LEVEL_CONFIGS[1].doorY;
+        currentGeo.buttonX = LEVEL_CONFIGS[1].buttonX;
+        currentGeo.buttonY = LEVEL_CONFIGS[1].buttonY;
 
-        currentGeo.buttonX = 385;
-        currentGeo.buttonY = 436;
         currentGeo.buttonPressed = false;
         currentGeo.buttonActive = false;
         currentGeo.buttonTimer = 5;
+
+        currentGeo.boxX = 320;
+        currentGeo.boxY = -60;
+        currentGeo.boxVelocityY = 0;
+        currentGeo.boxDropped = false;
       }
     }
 
@@ -524,7 +720,7 @@ export default function App() {
         )}
       </div>
 
-      {(LEVEL_PLATFORMS[gameState.level] || []).map((plat, index) => {
+      {(LEVEL_CONFIGS[gameState.level]?.platforms || []).map((plat, index) => {
         const isBoostPlatform =
           (gameState.level === 1 &&
             ((plat.x === 323 && plat.y === 278) ||
@@ -560,8 +756,8 @@ export default function App() {
           position: "absolute",
           left: gameState.buttonX,
           top: gameState.buttonY,
-          width: 15,
-          height: 45,
+          width: 45,
+          height: 15,
           backgroundColor: gameState.buttonActive
             ? "#4caf50"
             : gameState.buttonPressed
@@ -572,7 +768,7 @@ export default function App() {
           boxShadow: "4px 0px 8px rgba(0,0,0,0.4)",
           zIndex: 3,
           display: "flex",
-          flexDirection: "column",
+          flexDirection: "row",
           justifyContent: "center",
           alignItems: "center",
           color: "white",
@@ -582,13 +778,40 @@ export default function App() {
         }}
       >
         {gameState.buttonPressed ? (
-          gameState.buttonTimer
+          gameState.buttonTimer > 0 ? (
+            gameState.buttonTimer
+          ) : (
+            "✔"
+          )
         ) : (
-          <>
-            <span>⬜</span>
-          </>
+          <span>⬜</span>
         )}
       </div>
+
+      {gameState.level === 2 && gameState.boxDropped && (
+        <div
+          style={{
+            position: "absolute",
+            left: gameState.boxX,
+            top: gameState.boxY,
+            width: 40,
+            height: 40,
+            backgroundColor: "#d2691e",
+            border: "3px solid #8b4513",
+            borderRadius: "6px",
+            boxShadow: "0 4px 10px rgba(0,0,0,0.6)",
+            zIndex: 4,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            fontSize: 20,
+            userSelect: "none",
+            transition: "left 0.05s linear, top 0.05s linear",
+          }}
+        >
+          📦
+        </div>
+      )}
 
       <div
         style={{
