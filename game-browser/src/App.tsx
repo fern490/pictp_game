@@ -28,6 +28,10 @@ type GameState = {
   buttonTimer: number;
   buttonActive: boolean;
   buttonPressedAt?: number;
+  boxX: number;
+  boxY: number;
+  boxVelocityY: number;
+  boxDropped: boolean;
 };
 
 type Platform = {
@@ -53,10 +57,9 @@ const LEVEL_PLATFORMS: Record<number, Platform[]> = {
   ],
   2: [
     { x: 1, y: 540, width: 2500, height: 40 },
-
     { x: 250, y: 130, width: 380, height: 30 },
-
-    { x: 0, y: 290, width: 45, height: 200 },
+    { x: 0, y: 250, width: 45, height: 220 },
+    { x: 100, y: 531, width: 80, height: 12 },
   ],
 };
 
@@ -77,15 +80,19 @@ export default function App() {
     level: 2,
     keyCollected: false,
     keyX: 350,
-    keyY: 50,
+    keyY: 30,
     doorX: 1220,
     doorY: 280,
     keyCarrierId: null,
-    buttonX: 385,
-    buttonY: 436,
+    buttonX: 44,
+    buttonY: 270,
     buttonPressed: false,
     buttonTimer: 5,
     buttonActive: false,
+    boxX: 320,
+    boxY: -60,
+    boxVelocityY: 0,
+    boxDropped: false,
   });
 
   const playersRef = useRef<Player[]>([]);
@@ -294,51 +301,61 @@ export default function App() {
       let changed = false;
 
       for (let i = 0; i < currentPlayers.length; i++) {
-        for (let j = 0; j < currentPlayers.length; j++) {
-          if (i === j) continue;
+        for (let j = i + 1; j < currentPlayers.length; j++) {
+          const p1 = currentPlayers[i];
+          const p2 = currentPlayers[j];
 
-          const upper = currentPlayers[i];
-          const lower = currentPlayers[j];
+          const minX1 = p1.x;
+          const maxX1 = p1.x + PLAYER_SIZE;
+          const minY1 = p1.y;
+          const maxY1 = p1.y + PLAYER_SIZE;
 
-          const upperPhysics = velocitiesRef.current[upper.id];
+          const minX2 = p2.x;
+          const maxX2 = p2.x + PLAYER_SIZE;
+          const minY2 = p2.y;
+          const maxY2 = p2.y + PLAYER_SIZE;
 
-          const lowerPhysics = velocitiesRef.current[lower.id];
+          const overlapX = Math.min(maxX1, maxX2) - Math.max(minX1, minX2);
+          const overlapY = Math.min(maxY1, maxY2) - Math.max(minY1, minY2);
 
-          const overlapX =
-            upper.x + PLAYER_SIZE > lower.x + 4 &&
-            upper.x < lower.x + PLAYER_SIZE - 4;
+          if (overlapX > 0 && overlapY > 0) {
+            if (overlapY <= overlapX + 4) {
+              const upper = p1.y < p2.y ? p1 : p2;
+              const lower = p1.y < p2.y ? p2 : p1;
 
-          const verticalGap = upper.y + PLAYER_SIZE - lower.y;
+              const upperPhysics = velocitiesRef.current[upper.id];
+              const lowerPhysics = velocitiesRef.current[lower.id];
 
-          const stacked = verticalGap > -4 && verticalGap < 18;
+              upper.y = lower.y - PLAYER_SIZE;
 
-          if (overlapX && stacked) {
-            upper.y = lower.y - PLAYER_SIZE;
-
-            if (lowerPhysics?.vy < 0) {
-              upperPhysics.vy = lowerPhysics.vy;
-
-              upperPhysics.isGrounded = false;
+              if (lowerPhysics && lowerPhysics.vy < 0) {
+                if (upperPhysics) {
+                  upperPhysics.vy = lowerPhysics.vy;
+                  upperPhysics.isGrounded = false;
+                }
+              } else {
+                if (upperPhysics) {
+                  upperPhysics.vy = 0;
+                  upperPhysics.isGrounded = true;
+                }
+              }
+              changed = true;
             } else {
-              upperPhysics.vy = 0;
+              const leftPlayer = p1.x < p2.x ? p1 : p2;
+              const rightPlayer = p1.x < p2.x ? p2 : p1;
 
-              upperPhysics.isGrounded = true;
+              const pushAmount = overlapX / 2;
+              leftPlayer.x -= pushAmount;
+              rightPlayer.x += pushAmount;
+
+              leftPlayer.x = Math.max(0, leftPlayer.x);
+              rightPlayer.x = Math.min(
+                window.innerWidth - PLAYER_SIZE,
+                rightPlayer.x,
+              );
+
+              changed = true;
             }
-
-            changed = true;
-          }
-
-          const overlapY =
-            upper.y + PLAYER_SIZE > lower.y && upper.y < lower.y + PLAYER_SIZE;
-
-          if (overlapX && overlapY && verticalGap <= -5) {
-            const centerUpper = upper.x + PLAYER_SIZE / 2;
-
-            const centerLower = lower.x + PLAYER_SIZE / 2;
-
-            const push = centerUpper < centerLower ? -1 : 1;
-
-            upper.x += push * 0.5;
           }
         }
       }
@@ -509,9 +526,10 @@ export default function App() {
 
       {(LEVEL_PLATFORMS[gameState.level] || []).map((plat, index) => {
         const isBoostPlatform =
-          gameState.level === 1 &&
-          ((plat.x === 323 && plat.y === 278) ||
-            (plat.x === 886 && plat.y === 440));
+          (gameState.level === 1 &&
+            ((plat.x === 323 && plat.y === 278) ||
+              (plat.x === 886 && plat.y === 440))) ||
+          (gameState.level === 2 && plat.x === 100 && plat.y === 531);
 
         const isLeftCustomPlatform = gameState.level === 2 && plat.x === 0;
 
@@ -542,26 +560,34 @@ export default function App() {
           position: "absolute",
           left: gameState.buttonX,
           top: gameState.buttonY,
-          width: 40,
-          height: 20,
+          width: 15,
+          height: 45,
           backgroundColor: gameState.buttonActive
             ? "#4caf50"
             : gameState.buttonPressed
               ? "#ff9800"
               : "#f44336",
-          borderRadius: "6px 6px 0 0",
+          borderRadius: "4px",
           border: "2px solid #fff",
-          boxShadow: "0 4px 8px rgba(0,0,0,0.4)",
+          boxShadow: "4px 0px 8px rgba(0,0,0,0.4)",
           zIndex: 3,
           display: "flex",
+          flexDirection: "column",
           justifyContent: "center",
           alignItems: "center",
           color: "white",
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: "bold",
+          lineHeight: "10px",
         }}
       >
-        {gameState.buttonPressed ? gameState.buttonTimer : "PUSH"}
+        {gameState.buttonPressed ? (
+          gameState.buttonTimer
+        ) : (
+          <>
+            <span>⬜</span>
+          </>
+        )}
       </div>
 
       <div
